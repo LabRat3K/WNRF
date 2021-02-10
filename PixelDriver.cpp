@@ -21,7 +21,6 @@
 #include <utility>
 #include <algorithm>
 #include "PixelDriver.h"
-#include "bitbang.h"
 
 extern "C" {
 #include <eagle_soc.h>
@@ -32,7 +31,6 @@ extern "C" {
 
 static const uint8_t    *uart_buffer;       // Buffer tracker
 static const uint8_t    *uart_buffer_tail;  // Buffer tracker
-static bool             ws2811gamma;        // Gamma flag
 
 uint8_t PixelDriver::rOffset = 0;
 uint8_t PixelDriver::gOffset = 1;
@@ -105,10 +103,6 @@ void PixelDriver::setPin(uint8_t pin) {
         this->pin = pin;
 }
 
-void PixelDriver::setGamma(bool gamma) {
-    ws2811gamma = gamma;
-}
-
 void PixelDriver::ws2811_init() {
     /* Serial rate is 4x 800KHz for WS2811 */
     Serial1.begin(3200000, SERIAL_6N1, SERIAL_TX_ONLY);
@@ -139,10 +133,10 @@ void PixelDriver::ws2811_init() {
 }
 
 void PixelDriver::gece_init() {
-    /* Setup for bit-banging */
-    Serial1.end();
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, LOW);
+    // Serial rate is 3x 100KHz for GECE
+    Serial1.begin(300000, SERIAL_7N1, SERIAL_TX_ONLY);
+    SET_PERI_REG_MASK(UART_CONF0(UART), UART_TXD_BRK);
+    delayMicroseconds(GECE_TIDLE);
 }
 
 void PixelDriver::updateOrder(PixelColor color) {
@@ -206,71 +200,71 @@ const uint8_t* ICACHE_RAM_ATTR PixelDriver::fillWS2811(const uint8_t *buff,
     if (tail - buff > avail)
         tail = buff + avail;
 
-    if (ws2811gamma) {
-        while (buff + 2 < tail) {
-            uint8_t subpix = buff[rOffset];
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[GAMMA_2811[subpix] & 0x3]);
+    while (buff + 2 < tail) {
+        uint8_t subpix = buff[rOffset];
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 6) & 0x3]);
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 4) & 0x3]);
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 2) & 0x3]);
+        enqueue(LOOKUP_2811[GAMMA_TABLE[subpix] & 0x3]);
 
-            subpix = buff[gOffset];
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[GAMMA_2811[subpix] & 0x3]);
+        subpix = buff[gOffset];
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 6) & 0x3]);
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 4) & 0x3]);
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 2) & 0x3]);
+        enqueue(LOOKUP_2811[GAMMA_TABLE[subpix] & 0x3]);
 
-            subpix = buff[bOffset];
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[GAMMA_2811[subpix] & 0x3]);
+        subpix = buff[bOffset];
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 6) & 0x3]);
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 4) & 0x3]);
+        enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 2) & 0x3]);
+        enqueue(LOOKUP_2811[GAMMA_TABLE[subpix] & 0x3]);
 
-            buff += 3;
-        }
-    } else {
-        while (buff + 2 < tail) {
-            uint8_t subpix = buff[rOffset];
-            enqueue(LOOKUP_2811[(subpix >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(subpix >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(subpix >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[subpix & 0x3]);
-
-            subpix = buff[gOffset];
-            enqueue(LOOKUP_2811[(subpix >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(subpix >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(subpix >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[subpix & 0x3]);
-
-            subpix = buff[bOffset];
-            enqueue(LOOKUP_2811[(subpix >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(subpix >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(subpix >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[subpix & 0x3]);
-
-            buff += 3;
-        }
+        buff += 3;
     }
+
     return buff;
 }
 
-void PixelDriver::show() {
+void ICACHE_RAM_ATTR PixelDriver::show() {
     if (!pixdata) return;
 
     if (type == PixelType::WS2811) {
-        uart_buffer = pixdata;
-        uart_buffer_tail = pixdata + szBuffer;
-        SET_PERI_REG_MASK(UART_INT_ENA(1), UART_TXFIFO_EMPTY_INT_ENA);
+        if (!cntZigzag) {  // Normal / group copy
+            for (size_t led = 0; led < szBuffer / 3; led++) {
+                uint16 modifier = led / cntGroup;
+                asyncdata[3 * led + 0] = pixdata[3 * modifier + 0];
+                asyncdata[3 * led + 1] = pixdata[3 * modifier + 1];
+                asyncdata[3 * led + 2] = pixdata[3 * modifier + 2];
+            }
+        } else {  // Zigzag copy
+            for (size_t led = 0; led < szBuffer / 3; led++) {
+                uint16 modifier = led / cntGroup;
+                if (led / cntZigzag % 2) { // Odd "zig"
+                    int group = cntZigzag * (led / cntZigzag);
+                    int this_led = (group + cntZigzag - (led % cntZigzag) - 1) / cntGroup;
+                    asyncdata[3 * led + 0] = pixdata[3 * this_led + 0];
+                    asyncdata[3 * led + 1] = pixdata[3 * this_led + 1];
+                    asyncdata[3 * led + 2] = pixdata[3 * this_led + 2];
+                } else { // Even "zag"
+                    asyncdata[3 * led + 0] = pixdata[3 * modifier + 0];
+                    asyncdata[3 * led + 1] = pixdata[3 * modifier + 1];
+                    asyncdata[3 * led + 2] = pixdata[3 * modifier + 2];
+                }
+            }
 
+        }
+
+        uart_buffer = asyncdata;
+        uart_buffer_tail = asyncdata + szBuffer;
+
+        SET_PERI_REG_MASK(UART_INT_ENA(1), UART_TXFIFO_EMPTY_INT_ENA);
         startTime = micros();
 
-        // Copy the pixels to the idle buffer and swap them
-        memcpy(asyncdata, pixdata, szBuffer);
-        std::swap(asyncdata, pixdata);
     } else if (type == PixelType::GECE) {
-         uint32_t packet = 0;
+        uint32_t packet = 0;
+        uint32_t pTime = 0;
 
-        /* Build a GECE packet */
+        // Build a GECE packet
         startTime = micros();
         for (uint8_t i = 0; i < numPixels; i++) {
             packet = (packet & ~GECE_ADDRESS_MASK) | (i << 20);
@@ -280,8 +274,27 @@ void PixelDriver::show() {
             packet = (packet & ~GECE_GREEN_MASK) | pixdata[i*3+1];
             packet = (packet & ~GECE_RED_MASK) | (pixdata[i*3] >> 4);
 
-            /* and send it */
-            doGECE(pin, packet);
+            uint8_t shift = GECE_PSIZE;
+            for (uint8_t i = 0; i < GECE_PSIZE; i++)
+                pbuff[i] = LOOKUP_GECE[(packet >> --shift) & 0x1];
+
+            // Wait until ready
+            while ((micros() - pTime) < (GECE_TFRAME + GECE_TIDLE)) {}
+
+            // 10us start bit
+            pTime = micros();
+            uint32_t c = _getCycleCount();
+            CLEAR_PERI_REG_MASK(UART_CONF0(UART), UART_TXD_BRK);
+            while ((_getCycleCount() - c) < CYCLES_GECE_START - 100) {}
+
+            // Send packet and idle low (break)
+            Serial1.write(pbuff, GECE_PSIZE);
+            SET_PERI_REG_MASK(UART_CONF0(UART), UART_TXD_BRK);
         }
     }
+}
+
+uint8_t* PixelDriver::getData() {
+    return asyncdata;	// data post grouping or zigzaging
+//    return pixdata;
 }

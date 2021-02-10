@@ -19,8 +19,8 @@
 
 #include <Arduino.h>
 #include <FS.h>
+#include <lwip/def.h>
 #include "EFUpdate.h"
-#include "util.h"
 
 void EFUpdate::begin() {
     _maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
@@ -65,8 +65,7 @@ bool EFUpdate::process(uint8_t *data, size_t len) {
                         }
                     } else if (_record.type == RecordType::SPIFFS_IMAGE) {
                         // Begin spiffs update
-                        SPIFFS.end();
-                        if (!Update.begin(_record.size, U_SPIFFS)) {
+                        if (!Update.begin(_record.size, U_FS)) {
                             _state = State::FAIL;
                             _error = Update.getError();
                         } else {

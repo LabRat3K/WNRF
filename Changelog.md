@@ -1,12 +1,65 @@
 
-Changelog
-=========
-### 2.1
+# Changelog
+
+### 3.2
+
+- Compiled against [2.7.4 Arduino Core](https://github.com/esp8266/Arduino/releases/tag/2.7.4)
+- Updated to [AdruinoJson 6.17.0](https://github.com/bblanchon/ArduinoJson/releases/tag/v6.17.0)
+- Updated to [async-mqtt-client 2019.12.08](https://github.com/marvinroger/async-mqtt-client/tree/7f1ba481a22d56ccf123e4b2f6e555d134c956d0)
+- Fix for Client Timeout not Changing [Issue #201](https://github.com/forkineye/ESPixelStick/issues/201)
+- Updated the flash tool included in binary releases to fix issues flashing on newer releases of MacOS.
+
+### 3.1
+
+- Compiled against [2.6.3 Arduino Core](https://github.com/esp8266/Arduino/releases/tag/2.6.3)
+- ESPSFlashTool support for ESPixelStick v3.0 Hardware
+- Fixed DMX issues - [Issue #101](https://github.com/forkineye/ESPixelStick/issues/101)
+- Added brightness support.
+- Added calculated gamma support.
+- Added grouping and zigzag for pixels.
+- Added startup and idle effect options.
+- Added FPP Discovery support.
+- Added xLights ZCPP support.
+- Added DDP support.
+- Added Home Assistant MQTT Discovery support.
+- New effects for standalone and MQTT usage.
+- Changed GECE output from bit-banging to a UART based implementation.
+
+### 3.0
+
+- Compiled against [2017.11.20 Arduino core](https://github.com/esp8266/Arduino/tree/117bc875ffdd1f4b11af0dd236e0e12a84748e53)
+  - Includes WPA2 KRACK security fix
+- Migrated to [ESPAsyncE131](https://github.com/forkineye/ESPAsyncE131) library
+- Fixed [Issue #56](https://github.com/forkineye/ESPixelStick/issues/56) - Read too far
+- Fixed [Issue #65](https://github.com/forkineye/ESPixelStick/issues/65) - Websocket queuing
+- Fixed [Issue #80](https://github.com/forkineye/ESPixelStick/issues/80) - Test mode state reporting
+
+### 3.0-rc3
+
+- Fixed IGMP timer bug in lwip (Fix submitted to ESP8266 Arduino project)
+
+### 3.0-rc2
+
+- Fixed IGMP subscription bug introduced in 3.0-dev1
+- Fixed issue receiving E1.31 alternate start codes (fixed in E131 library)
+- Added Universe Boundary configuration
+
+### 3.0-rc1
+
+- Fixed validation errors on wifi setup page.
+- Fixed AP reboot loop.
+- Fixed color order issue in testing interface.
+
+### 3.0-dev1
+
 - Complete re-write of the web frontend. Requires a WebSockets capable browser.
+- Migrated to ESPAsyncUDP for E131 parsing (E131 library updated).
+- Increased WS2811 reset time from 50us to 300us to support newer WS2811 chips.
+- Added hostname configuration.
 - Added GBR and BGR color order for pixels.
-- Changed WS2811 reset time from 50us to 80us to better support WS2811 clones.
 
 ### 2.0
+
 - Added web based OTA update capability.
 - Changed output type (pixel vs serial) to compile time option. Check top of main sketch.
 - Migrated to ESPAsyncWebserver for the web server.
@@ -23,22 +76,26 @@ Changelog
 - Added 480kbps for Renard.
 
 ### 1.4
+
 - Arduino 1.6.8 compatibility.
 - Added SoftAP support (credit: Bill Porter)
 - Added Renard Support (credit: Bill Porter)
 - Added DMX Support (credit: Bill Porter and Grayson Lough)
 
 ### 1.3
+
 - Fix for issues when compiling on Mac and Linux.
 - Web page optimizations.
 - Configuration structure update to fix alignment errors.
 
-#### 1.2
+### 1.2
+
 - Added Administration Page.
 - Disconnect from WiFi before rebooting.
 - Code cleanup / housekeeping.
 
-#### 1.1
+### 1.1
+
 - Migration to UART code for handling WS281x streams.
 - Initial GECE support.
 - Support for multiple universes.
@@ -46,7 +103,8 @@ Changelog
 - Removed external library dependencies.
 - Added stream timeout and refresh overflow handling.
 
-#### 1.0
+### 1.0
+
 - Initial release.
 - Single Universe.
 - WS281x only.

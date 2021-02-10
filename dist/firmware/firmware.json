@@ -1,0 +1,34 @@
+{
+    "modes": [
+        {
+            "name": "Pixel (WS2811 / GECE)",
+            "description": "Pixel Mode",
+            "version": "3.2 (20201103)",
+            "file": "pixel-3.2-1m_128k.bin"
+        },
+        {
+            "name": "Serial (DMX / Renard)",
+            "description": "Serial Mode",
+            "version": "3.2 (20201103)",
+            "file": "serial-3.2-1m_128k.bin"
+        }
+    ],
+
+    "devices": [
+        {
+            "name": "ESPixelStick V1 / V2 / V3",
+            "espplatformname": "esp8266",
+            "esptool": {
+                "reset": "nodemcu",
+                "baudrate": "115200",
+                "spiffsloc": "0xDB000",
+                "binloc": "0x0"
+            },
+            "mkspiffs": {
+                "page": "256",
+                "block": "4096",
+                "size": "131072"
+            }
+        }
+    ]
+}
