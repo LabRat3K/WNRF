@@ -77,7 +77,7 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     if (chan_size >32) {
        alloc_size=529; // # space for 1 byte header on 31 byte payloads
        startTime = micros();
-       //NrfTxAddress[0] = 0x82;
+       NrfTxAddress[0] = 0x82;
     } else {
        startTime = millis();
     }
