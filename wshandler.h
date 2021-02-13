@@ -109,6 +109,24 @@ void procX(uint8_t *data, AsyncWebSocketClient *client) {
             ddpJ["max_channel"] = (String)ddp.stats.ddpMaxChannel;
             ddpJ["min_channel"] = (String)ddp.stats.ddpMinChannel;
 
+            // WNRF stats
+            JsonObject nrf = json.createNestedObject("nrf");
+            if (config.nrf_chan==NrfChan::NRFCHAN_LEGACY) {
+               //nrf["chan"] = static_cast<uint8_t>(config.nrf_chan);
+               nrf["chan"] = "2.480 Mhz";
+            } else {
+               uint8_t tempChan = 70+((static_cast<uint8_t>(config.nrf_chan)-1)*2);
+               nrf["chan"] = "2.4"+String(tempChan)+" Mhz";
+            }
+            if  (config.nrf_baud == NrfBaud::BAUD_2Mbps) {
+               nrf["baud"] = "2 Mbps";
+            } else {
+               nrf["baud"] = "1 Mbps";
+            }
+ //
+ // To Do: add count after we start probing devices
+ //
+
             String response;
             serializeJson(json, response);
             client->text("XJ" + response);
@@ -162,16 +180,14 @@ void procE(uint8_t *data, AsyncWebSocketClient *client) {
             nrf_baud["2 Mbps"] = static_cast<uint8_t>(NrfBaud::BAUD_2Mbps);
 
             JsonObject nrf_chan = json.createNestedObject("nrf_chan");
-            nrf_chan["Legacy (80)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_LEGACY);
-            nrf_chan["(101)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_A);
-            nrf_chan["(103)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_B);
-            nrf_chan["(105)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_C);
-            nrf_chan["(107)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_D);
-            nrf_chan["(109)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_E);
-            nrf_chan["(111)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_F);
-            nrf_chan["(113)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_G);
-            nrf_chan["(115)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_H);
-            nrf_chan["(117)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_I);
+            nrf_chan["Legacy (2480)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_LEGACY);
+            nrf_chan["2470"] = static_cast<uint8_t>(NrfChan::NRFCHAN_A);
+            nrf_chan["2472"] = static_cast<uint8_t>(NrfChan::NRFCHAN_B);
+            nrf_chan["2474"] = static_cast<uint8_t>(NrfChan::NRFCHAN_C);
+            nrf_chan["2476"] = static_cast<uint8_t>(NrfChan::NRFCHAN_D);
+            nrf_chan["2478"] = static_cast<uint8_t>(NrfChan::NRFCHAN_E);
+            nrf_chan["2480"] = static_cast<uint8_t>(NrfChan::NRFCHAN_F);
+            nrf_chan["2482"] = static_cast<uint8_t>(NrfChan::NRFCHAN_G);
 
 #endif
 
@@ -289,9 +305,11 @@ void procS(uint8_t *data, AsyncWebSocketClient *client) {
             client->text("S1");
             break;
         case '2':   // Set Device Config
+#ifdef MQTT
             // Reboot if MQTT changed
             if (config.mqtt != json["mqtt"]["enabled"])
                 reboot = true;
+#endif
 
             dsDeviceConfig(json.as<JsonObject>());
             saveConfig();
@@ -369,8 +387,10 @@ void procT(uint8_t *data, AsyncWebSocketClient *client) {
         }
     }
 
+#ifdef MQTT
     if (config.mqtt)
         publishState();
+#endif
 }
 
 void procV(uint8_t *data, AsyncWebSocketClient *client) {
@@ -387,7 +407,12 @@ void procV(uint8_t *data, AsyncWebSocketClient *client) {
             client->binary(out_driver.getData(), config.channel_count);
 #endif
             break;
-        }
+           }
+#if defined(ESPS_MODE_WNRF)
+	case '2': { // View Frequency Histogram
+            client->binary(out_driver.getHistogram(),84);
+           }
+#endif
     }
 }
 

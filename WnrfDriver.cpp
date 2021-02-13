@@ -42,13 +42,15 @@
 #include <SPI.h>
 #include "RF24.h"
 #include "WnrfDriver.h"
-
+#include <printf.h>
 
 // Some common board pin assignments
 // WeMos R1
 //RF24 radio(D4,D8); 
 // WNRF
-RF24 radio(D4,D3);
+//LabRat Debug RF24 radio(D4,D3);
+//RF24 radio(D2,D1);
+RF24 radio(4,5);
 
 /* Set Data Rate based on nrfBaud option */
 void WnrfDriver::setBaud(NrfBaud baud) {
@@ -64,8 +66,15 @@ int WnrfDriver::begin() {
    return begin(NrfBaud::BAUD_2Mbps, NrfChan::NRFCHAN_LEGACY, 32);
 }
 
+
+byte addr_legacy[] = {0x81, 0xF0, 0xF0, 0xF0, 0xF0};//LEgacy for now
+
+byte addr_wnrf[]  = {0xC1,0xDE,0xC0}; // Was LEDCTL (1EDC71)
+byte addr_e131_bcast[] = {0xde,0xfa,0xda};
+byte addr_ctrl_id[]={0x00,0x00,0x1D};
+byte addr_ctrl_bcast[]={0xFF,0x00,0x1D};
+
 int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
-    byte NrfTxAddress[] = {0x81,0xF0,0xF0,0xF0,0xF0};
     byte NrfRxAddress[] = {0xFF,0x3A,0x66,0x65,0x76};
     int alloc_size = 32;
 
@@ -77,7 +86,6 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     if (chan_size >32) {
        alloc_size=529; // # space for 1 byte header on 31 byte payloads
        startTime = micros();
-       NrfTxAddress[0] = 0x82;
     } else {
        startTime = millis();
     }
@@ -97,28 +105,30 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     radio.begin();
     if ((uint8_t) chanid) {
         // Channel - should be 101 to 119
-        radio.setChannel(99+(2* (uint8_t) chanid));
+        radio.setChannel(68+(2* (uint8_t) chanid));
     } else {
         radio.setChannel(80);  // LabRat - Legacy devices used channel 80
     }
     radio.setPayloadSize(32);
-    radio.setAddressWidth(5);
     radio.setAutoAck(false);
     // Baud Rate - to be added as CONFIG option
     setBaud(baud);
     radio.setCRCLength(RF24_CRC_16);
+    //radio.enableDynamicAck();
     //radio.disableDynamicPayloads();
     // Power Level - to be added as CONFIG option
-    radio.setPALevel(RF24_PA_LOW); // LabRat - crank this up RF24_PA_MAX
+    radio.setPALevel(RF24_PA_HIGH); // LabRat - crank this up RF24_PA_MAX
   
-    // TxAddress - to be a CONFIG option
-    radio.openWritingPipe(NrfTxAddress); 
-    radio.openReadingPipe(0,NrfRxAddress); 
-    NrfRxAddress[0] = radio.getChannel();
-    radio.openReadingPipe(1,NrfRxAddress); 
+    if (chan_size == 32) { // Legacy Mode
+       radio.setAddressWidth(5);
+       radio.openWritingPipe(addr_legacy); 
+    } else {
+       radio.setAddressWidth(3);
+       radio.openWritingPipe(addr_e131_bcast);
+       radio.openReadingPipe(1,addr_wnrf);
+    }
 
     radio.stopListening();
-    //radio.printDetails();
 
     // Default counters and state for the LED output
     led_state = 1; 
@@ -135,7 +145,9 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
 
 void WnrfDriver::show() {
 	/* Send the packet */
-    bool result = radio.write(&(_dmxdata[next_packet*32]),32);
+
+    radio.stopListening();
+    radio.write(&(_dmxdata[next_packet*32]),32,1);
 
     led_count--;
     if (num_channels == 32)
@@ -146,12 +158,14 @@ void WnrfDriver::show() {
     }
     if (led_count == 0) {
         led_state ^=1;
-        digitalWrite(D10, led_state);
+        digitalWrite(1, led_state);
         if (num_channels ==32) 
             led_count =44;   // Legacy mode 44 single fps target
         else
             led_count = 44*17; // Mode 1: 44 DMX universe fps target
     }
+
+    radio.startListening();
 }
 
 /* For the ESPixelStick visualation */
@@ -160,3 +174,150 @@ uint8_t* WnrfDriver::getData() {
     return _dmxdata;
 }
 
+#define num_channels 84
+uint8_t values[num_channels];
+uint8_t* WnrfDriver::getHistogram() {
+   int chanId, loopcount; 
+   memset(values, 0, sizeof(values));
+   radio.setAutoAck(false);
+   radio.stopListening();
+
+   loopcount = 2;
+
+   while (loopcount--) {
+      for (chanId=0;chanId<num_channels;chanId++) {
+         radio.setChannel(chanId);
+         radio.startListening();
+         delayMicroseconds(128);
+         radio.stopListening();
+
+         if (radio.testCarrier()) {
+            ++values[chanId];
+         }
+      }
+   }
+
+   // Restore the setup
+   return values;
+}
+
+static uint8_t poll_cycle = 0x00;
+
+void WnrfDriver::triggerPoll() {
+   byte tempPacket[32];
+   /* Starts a state machine to use CTRL channel to query what devices are out there */
+   // Initially only send this out on sub-group 0x00 (find devices 0x0001 through 0x00FE)
+
+   // Only using a single POLL CYCLE at this time
+   addr_ctrl_bcast[1] = poll_cycle;
+
+   Serial.println("Sending QRY_DEVID");
+   radio.stopListening();
+   radio.openWritingPipe(addr_ctrl_bcast); 
+   tempPacket[0] = 0x00;
+   radio.write(tempPacket,32,1); // BROADCAST packet
+   radio.openWritingPipe(addr_e131_bcast);
+   radio.startListening();
+   //radio.printDetails();
+}
+
+void WnrfDriver::sendGenericCmd(uint16_t devId, uint8_t cmd, uint16_t value) {
+   byte tempPacket[32];
+
+   // Address to the specific device
+   addr_ctrl_id[1] = devId>>8;
+   addr_ctrl_id[0] = devId&0xFF;
+
+   Serial.print("Sending CMD: ");
+   Serial.print(cmd);
+   Serial.print(" to ");
+   Serial.println(devId,HEX);
+
+   radio.stopListening();
+   radio.openWritingPipe(addr_ctrl_id); 
+   tempPacket[0] = cmd;
+   tempPacket[1] = value>>8;
+   tempPacket[2] = value&0xFF;
+   radio.write(tempPacket,32); // P2P uses AA on the receiver
+   radio.openWritingPipe(addr_e131_bcast);
+   radio.startListening();
+}
+
+void WnrfDriver::sendNewDevId(uint16_t devId, uint16_t value) {
+   byte tempPacket[32] = {0x00,0x00,0x00,0x00,'L','A','B','R','A','T'};
+   
+   addr_ctrl_id[1] = devId>>8;
+   addr_ctrl_id[0] = devId&0xFF;
+
+   Serial.print("MTC CMD: PROG DEVICE: ");
+   Serial.print(devId,HEX);
+   Serial.print(" to ");
+   Serial.println(value,HEX);
+
+   radio.stopListening();
+   radio.openWritingPipe(addr_ctrl_id); 
+   // Update the payload packet
+      // Protocol: 48-bit "string" to avoid accidental false positives.
+      // byte 0 = 0x03 Write DeviceId command
+      // byte 1 = New DevId MSB
+      // byte 2 = New DevId LSB
+      // byte 3 = CSUM 
+      // byte 4..9 "LABRAT"
+      // LabRat's Light Weight CSUM - try and avoid accidental re-programming
+      // 48-bit "LABRAT" string + a computational hash of sorts.
+      // Receiver can check the 40 bits *AND* calculate
+      //  (((0x82^(value>>8)) ^ (0x65^(value&0xFF)))+0x84))
+      // then add it to the CSUM total and *should* see 0xFF
+      tempPacket[0] = 0x03;
+      tempPacket[1] = value>>8;
+      tempPacket[2] = value&0xFF;
+      tempPacket[4] = (((0x82^(value>>8)) ^ (0x65^(value&0xFF)))+0x84)^0xFF;
+ 
+   radio.write(tempPacket,32); // P2P uses AA on the receiver
+   radio.openWritingPipe(addr_e131_bcast);
+   radio.startListening();
+}
+
+/*
+void WnrfDriver::sendNewDevId(uint16_t devId, uint16_t newId) {
+   sendGenericCmd(devId, 0x03, newId);
+}
+*/
+
+void WnrfDriver::sendNewChan(uint16_t devId, uint8_t chanId) {
+   sendGenericCmd(devId, 0x02 /* cmd */, chanId<<8);
+}
+
+void WnrfDriver::sendNewStart(uint16_t devId, uint16_t start) {
+   sendGenericCmd(devId, 0x01 /* cmd */, start);
+}
+
+void WnrfDriver::checkRx() {
+    /* Was there a received packet? */
+    uint8_t pipe;
+    if (radio.available(&pipe)) {
+        uint8_t payload[32];
+        uint8_t psize=0x00;
+
+        radio.read(payload,radio.getPayloadSize());
+        // Was it on the COMMAND interface
+        switch(payload[0]) {
+            case 0: psize = 0x0B; break; // START
+            case 1: psize = 0x04; break; // WRITE
+            case 2: psize = 0x04; break; // COMMIT
+            case 3: psize = 0x03; break; // AUDIT
+            default: break;
+        }
+
+        // Deal with it
+        Serial.print("Rx CTL packet: (");
+        Serial.print(pipe);
+        Serial.print(") ");
+        for (int i=0;i<psize;i++) {
+          char hex[3];
+          sprintf(hex,"%2.2x",payload[i]);
+          Serial.print(hex);
+        }
+        Serial.println(".");
+    }
+}

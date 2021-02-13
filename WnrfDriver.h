@@ -29,15 +29,13 @@ enum class NrfBaud : uint8_t {
 
 enum class NrfChan : uint8_t {
     NRFCHAN_LEGACY,  /* 80 */
-    NRFCHAN_A,       /* 101..102 */
-    NRFCHAN_B,       /* 103..104 */
-    NRFCHAN_C,       /* 105..106 */
-    NRFCHAN_D,       /* 107..108 */
-    NRFCHAN_E,       /* 109..110 */
-    NRFCHAN_F,       /* 111..112 */
-    NRFCHAN_G,       /* 113..114 */
-    NRFCHAN_H,       /* 115..116 */
-    NRFCHAN_I,       /* 117..118 */
+    NRFCHAN_A,       /* 70..71 */
+    NRFCHAN_B,       /* 72..73 */
+    NRFCHAN_C,       /* 74..73 */
+    NRFCHAN_D,       /* 76..73 */
+    NRFCHAN_E,       /* 78..73 */
+    NRFCHAN_F,       /* 80..81 */
+    NRFCHAN_G        /* 82..83 */
 };
 
 class WnrfDriver {
@@ -46,7 +44,14 @@ class WnrfDriver {
     int begin();
     void show();
     uint8_t* getData();
+    uint8_t* getHistogram();
 
+    /* NRF Device Management */
+    void triggerPoll();
+    void checkRx();
+    void sendNewDevId(uint16_t devId, uint16_t newId);
+    void sendNewChan (uint16_t devId, uint8_t  chanId);
+    void sendNewStart(uint16_t devId, uint16_t start);
 
     /* Set channel value at address */
     inline void setValue(uint16_t address, uint8_t value) {
@@ -61,7 +66,7 @@ class WnrfDriver {
         if (num_channels == 32) {
             return (millis() - startTime) >= 22;
         } else {
-            return (micros() - startTime) >= 865; //Practical vs Theoretical 1336;
+            return (micros() - startTime) >= 665; //Practical vs Theoretical 1336;
         }
     }
  private:
@@ -74,6 +79,7 @@ class WnrfDriver {
  
     uint8_t     led_count;      // For LED based feedback
     uint8_t     led_state;      // Blink approx 1 per second
+    void        sendGenericCmd(uint16_t devId, uint8_t cmd, uint16_t value);
 };
 
 #endif /* WNRFDIVER_H_ */

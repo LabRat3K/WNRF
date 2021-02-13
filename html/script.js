@@ -1,5 +1,5 @@
 var mode = 'null';
-var gpio_list = [0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16];
+//var gpio_list = [0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16];
 var wsQueue = [];
 var wsBusy = false;
 var wsTimerId;
@@ -10,6 +10,14 @@ var effectInfo;
 // Default modal properties
 $.fn.modal.Constructor.DEFAULTS.backdrop = 'static';
 $.fn.modal.Constructor.DEFAULTS.keyboard = false;
+
+// Histogram 
+histData=[];
+histPhase = 0;
+
+for (i=0;i<84;i++) {
+   histData.push(0);
+}
 
 // jQuery doc ready
 $(function() {
@@ -26,6 +34,11 @@ $(function() {
         // kick start the live stream
         if ($(this).attr('href') == "#diag") {
             wsEnqueue('V1');
+        }
+
+        // kick start the frequency scanner
+        if ($(this).attr('href') == "#hist") {
+            wsEnqueue('V2');
         }
 
         // Collapse the menu on smaller screens
@@ -173,19 +186,6 @@ $(function() {
        }
     });
 
-    // MQTT field toggles
-    $('#mqtt_topic').keyup(function() {
-        updateMQTTSet();
-    });
-
-    $('#mqtt').click(function() {
-        if ($(this).is(':checked')) {
-            $('.mqtt').removeClass('hidden');
-       } else {
-            $('.mqtt').addClass('hidden');
-       }
-    });
-
     $('#nrf_legacy').click(function() {
         if ($(this).is(':checked')) {
             $('.nrf').addClass('hidden');
@@ -207,14 +207,6 @@ $(function() {
             $('.gammagraph').removeClass('hidden');
        } else {
             $('.gammagraph').addClass('hidden');
-       }
-    });
-
-    $('#mqtt_hadisco').click(function() {
-        if ($(this).is(':checked')) {
-            $('#mqtt_haprefix').prop('disabled', false);
-       } else {
-            $('#mqtt_haprefix').prop('disabled', true);
        }
     });
 
@@ -274,19 +266,16 @@ $(function() {
     ctx.font = "20px Arial";
     ctx.textAlign = "center";
 
+    canvas2 = document.getElementById("canvas2");
+    ctx2 = canvas2.getContext("2d");
+    ctx2.font = "20px Arial";
+    ctx2.textAlign = "center";
+
     // autoload tab based on URL hash
     var hash = window.location.hash;
     hash && $('ul.navbar-nav li a[href="' + hash + '"]').click();
 
 });
-
-function updateMQTTSet() {
-    if ( $('#mqtt_topic').val() ) {
-        $('#mqtt_topicset').val( $('#mqtt_topic').val() + '/set');
-    } else {
-        $('#mqtt_topicset').val( '' );
-    }
-}
 
 function wifiValidation() {
     var WifiSaveDisabled = false;
@@ -444,8 +433,18 @@ function wsConnect() {
                 }
             } else {
                 streamData= new Uint8Array(event.data);
-                drawStream(streamData);
-                if ($('#diag').is(':visible')) wsEnqueue('V1');
+
+                if (streamData.length==84) {  // Major hack for now
+                   drawHist(streamData);
+                   if ($('#hist').is(':visible')) {
+                      wsEnqueue('V2');
+                   }
+                } else { 
+                   drawStream(streamData);
+                   if ($('#diag').is(':visible')) {
+                      wsEnqueue('V1');
+                   }
+                } 
             }
             wsReadyToSend();
         };
@@ -456,7 +455,7 @@ function wsConnect() {
         };
 
     } else {
-        alert('WebSockets is NOT supported by your Browser! You will need to upgrade your browser or downgrade to v2.0 of the ESPixelStick firmware.');
+        alert('WebSockets is NOT supported by your Browser! You will need to upgrade your browser or.');
     }
 }
 
@@ -540,6 +539,44 @@ function drawStream(streamData) {
 
 }
 
+function drawHist(histStream) {
+    if (typeof ctx2 !== 'undefined') {
+       ctx2.fillStyle='rgb(0,200,180)';
+       histPhase=(histPhase+1)%5;
+       if (histPhase == 0 ) {
+          ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
+          for (i = 0; i < 84; i++) {
+             if (histData[i]>0){
+                histData[i]--;
+             }
+          }
+       }
+
+       for (i = 0; i < 84; i++) {
+           histData[i]+=histStream[i];
+           if (histData[i]>9) {
+              histData[i]=9;
+           }
+           if (i>11) {
+              if (((i-12)%5)==0) {
+                 ctx2.fillStyle='rgb(2000,200,0)';
+              }
+              if (((i-12)%5)==1) {
+                 ctx2.fillStyle='rgb(0,200,180)';
+              }
+           }
+           ctx2.fillRect(10+(i*5),250-(histData[i]*25+2),4,(histData[i]*25)+2);
+           if (i%20==0) {
+              ctx2.fillText(i,10+i*5, 270 );
+           }
+       }
+       ctx2.fillStyle='rgb(2000,200,0)';
+       for (i = 0; i < 11; i++) {
+              ctx2.fillText(i+1,10+((i*5+12))*5, 290 );
+       }
+    }
+}
+
 function clearStream() {
     if (typeof ctx !== 'undefined') {
      ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -589,28 +626,6 @@ function getConfig(data) {
             config.network.gateway[1] + '.' +
             config.network.gateway[2] + '.' +
             config.network.gateway[3]);
-
-    // MQTT Config
-    $('#mqtt').prop('checked', config.mqtt.enabled);
-    if (config.mqtt.enabled) {
-        $('.mqtt').removeClass('hidden');
-    } else {
-        $('.mqtt').addClass('hidden');
-    }
-    $('#mqtt_ip').val(config.mqtt.ip);
-    $('#mqtt_port').val(config.mqtt.port);
-    $('#mqtt_user').val(config.mqtt.user);
-    $('#mqtt_password').val(config.mqtt.password);
-    $('#mqtt_topic').val(config.mqtt.topic);
-    updateMQTTSet();
-    $('#mqtt_haprefix').val(config.mqtt.haprefix);
-    $('#mqtt_clean').prop('checked', config.mqtt.clean);
-    $('#mqtt_hadisco').prop('checked', config.mqtt.hadisco);
-    if (config.mqtt.hadisco) {
-        $('#mqtt_haprefix').prop('disabled', false);
-    } else {
-        $('#mqtt_haprefix').prop('disabled', true);
-    }
 
     // E1.31 Config
     $('#universe').val(config.e131.universe);
@@ -694,6 +709,7 @@ function getConfigStatus(data) {
     $('#x_usedflashsize').text(status.usedflashsize);
     $('#x_realflashsize').text(status.realflashsize);
     $('#x_freeheap').text(status.freeheap);
+
 }
 
 function getEffectInfo(data) {
@@ -765,6 +781,11 @@ function getJsonStatus(data) {
     $('#serr').text(status.e131.seq_errors);
     $('#perr').text(status.e131.packet_errors);
     $('#clientip').text(status.e131.last_clientIP);
+
+// getNrfStatus
+    $('#stat_chan').text(status.nrf.chan);
+    $('#stat_rate').text(status.nrf.baud);
+    $('#stat_count').text("0");
 }
 
 function refreshGamma(data) {
@@ -828,17 +849,6 @@ function submitConfig() {
     var json = {
             'device': {
                 'id': $('#devid').val()
-            },
-            'mqtt': {
-                'enabled': $('#mqtt').prop('checked'),
-                'ip': $('#mqtt_ip').val(),
-                'port': $('#mqtt_port').val(),
-                'user': $('#mqtt_user').val(),
-                'password': $('#mqtt_password').val(),
-                'topic': $('#mqtt_topic').val(),
-                'haprefix': $('#mqtt_haprefix').val(),
-                'clean': $('#mqtt_clean').prop('checked'),
-                'hadisco': $('#mqtt_hadisco').prop('checked')
             },
             'e131': {
                 'universe': parseInt($('#universe').val()),

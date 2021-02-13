@@ -1,20 +1,20 @@
 /*
-* ESPixelStick.ino
-*
-* Project: ESPixelStick - An ESP8266 and E1.31 based pixel driver
-* Copyright (c) 2016 Shelby Merrick
-* http://www.forkineye.com
-*
-*  This program is provided free for you to use in any way that you wish,
-*  subject to the laws and regulations where you are using it.  Due diligence
-*  is strongly suggested before using this code.  Please give credit where due.
-*
-*  The Author makes no warranty of any kind, express or implied, with regard
-*  to this program or the documentation contained in this document.  The
-*  Author shall not be liable in any event for incidental or consequential
-*  damages in connection with, or arising out of, the furnishing, performance
-*  or use of these programs.
-*
+  ESPixelStick.ino
+
+  Project: ESPixelStick - An ESP8266 and E1.31 based pixel driver
+  Copyright (c) 2016 Shelby Merrick
+  http://www.forkineye.com
+
+   This program is provided free for you to use in any way that you wish,
+   subject to the laws and regulations where you are using it.  Due diligence
+   is strongly suggested before using this code.  Please give credit where due.
+
+   The Author makes no warranty of any kind, express or implied, with regard
+   to this program or the documentation contained in this document.  The
+   Author shall not be liable in any event for incidental or consequential
+   damages in connection with, or arising out of, the furnishing, performance
+   or use of these programs.
+
 */
 
 /*****************************************/
@@ -22,8 +22,8 @@
 /*****************************************/
 
 /* Fallback configuration if config.json is empty or fails */
-const char ssid[] = "ENTER_SSID_HERE";
-const char passphrase[] = "ENTER_PASSPHRASE_HERE";
+const char ssid[] = "";
+const char passphrase[] = "";
 
 
 /*****************************************/
@@ -50,8 +50,8 @@ extern "C" {
 extern "C" void system_set_os_print(uint8 onoff);
 extern "C" void ets_install_putc1(void* routine);
 
-static void _u0_putc(char c){
-  while(((U0S >> USTXC) & 0x7F) == 0x7F);
+static void _u0_putc(char c) {
+  while (((U0S >> USTXC) & 0x7F) == 0x7F);
   U0F = c;
 }
 #endif
@@ -92,8 +92,10 @@ WiFiEventHandler    wifiConnectHandler;     // WiFi connect handler
 WiFiEventHandler    wifiDisconnectHandler;  // WiFi disconnect handler
 Ticker              wifiTicker;     // Ticker to handle WiFi
 Ticker              idleTicker;     // Ticker for effect on idle
+#ifdef MQTT
 AsyncMqttClient     mqtt;           // MQTT object
 Ticker              mqttTicker;     // Ticker to handle MQTT
+#endif
 EffectEngine        effects;        // Effects Engine
 IPAddress           ourLocalIP;
 IPAddress           ourSubnetMask;
@@ -110,7 +112,7 @@ WnrfDriver      out_driver;
 #endif
 
 #define LED_WIFI 2
-#define LED_NRF  D10
+#define LED_NRF  1 /* AKA D10 */
 
 /////////////////////////////////////////////////////////
 //
@@ -161,7 +163,7 @@ void setup() {
     config.ds = DataSource::E131;
 
     LOG_PORT.println("");
-    LOG_PORT.print(F("ESPixelStick v"));
+    LOG_PORT.print(F("WNRF v"));
     for (uint8_t i = 0; i < strlen_P(VERSION); i++)
         LOG_PORT.print((char)(pgm_read_byte(VERSION + i)));
     LOG_PORT.print(F(" ("));
@@ -220,6 +222,7 @@ void setup() {
     // Setup WiFi Handlers
     wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
 
+#ifdef MQTT
     // Setup MQTT Handlers
     if (config.mqtt) {
         mqtt.onConnect(onMqttConnect);
@@ -231,6 +234,7 @@ void setup() {
         if (config.mqtt_user.length() > 0)
             mqtt.setCredentials(config.mqtt_user.c_str(), config.mqtt_password.c_str());
     }
+#endif
 
     // Fallback to default SSID and passphrase if we fail to connect
     initWifi();
@@ -246,7 +250,7 @@ void setup() {
         if (config.ap_fallback) {
             LOG_PORT.println(F("*** FAILED TO ASSOCIATE WITH AP, GOING SOFTAP ***"));
             WiFi.mode(WIFI_AP);
-            String ssid = "ESPixelStick " + String(config.hostname);
+            String ssid = "WNRF " + String(config.hostname);
             WiFi.softAP(ssid.c_str());
             ourLocalIP = WiFi.softAPIP();
             ourSubnetMask = IPAddress(255,255,255,0);
@@ -309,109 +313,113 @@ void setup() {
 /////////////////////////////////////////////////////////
 
 void initWifi() {
-    // Switch to station mode and disconnect just in case
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
+  // Switch to station mode and disconnect just in case
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
 
-    connectWifi();
-    uint32_t timeout = millis();
-    while (WiFi.status() != WL_CONNECTED) {
-        LOG_PORT.print(".");
-        delay(500);
-        if (millis() - timeout > (1000 * config.sta_timeout) ){
-            LOG_PORT.println("");
-            LOG_PORT.println(F("*** Failed to connect ***"));
-            break;
-        }
+  connectWifi();
+  uint32_t timeout = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    LOG_PORT.print(".");
+    delay(500);
+    if (millis() - timeout > (1000 * config.sta_timeout) ) {
+      LOG_PORT.println("");
+      LOG_PORT.println(F("*** Failed to connect ***"));
+      break;
     }
+  }
 }
 
 void connectWifi() {
-    delay(secureRandom(100, 500));
+  delay(secureRandom(100, 500));
 
-    LOG_PORT.println("");
-    LOG_PORT.print(F("Connecting to "));
-    LOG_PORT.print(config.ssid);
-    LOG_PORT.print(F(" as "));
-    LOG_PORT.println(config.hostname);
+  LOG_PORT.println("");
+  LOG_PORT.print(F("Connecting to "));
+  LOG_PORT.print(config.ssid);
+  LOG_PORT.print(F(" as "));
+  LOG_PORT.println(config.hostname);
 
-    WiFi.begin(config.ssid.c_str(), config.passphrase.c_str());
-    if (config.dhcp) {
-        LOG_PORT.print(F("Connecting with DHCP"));
-    } else {
-        // We don't use DNS, so just set it to our gateway
-        WiFi.config(IPAddress(config.ip[0], config.ip[1], config.ip[2], config.ip[3]),
-                    IPAddress(config.gateway[0], config.gateway[1], config.gateway[2], config.gateway[3]),
-                    IPAddress(config.netmask[0], config.netmask[1], config.netmask[2], config.netmask[3]),
-                    IPAddress(config.gateway[0], config.gateway[1], config.gateway[2], config.gateway[3])
-        );
-        LOG_PORT.print(F("Connecting with Static IP"));
-    }
+  WiFi.begin(config.ssid.c_str(), config.passphrase.c_str());
+  if (config.dhcp) {
+    LOG_PORT.print(F("Connecting with DHCP"));
+  } else {
+    // We don't use DNS, so just set it to our gateway
+    WiFi.config(IPAddress(config.ip[0], config.ip[1], config.ip[2], config.ip[3]),
+                IPAddress(config.gateway[0], config.gateway[1], config.gateway[2], config.gateway[3]),
+                IPAddress(config.netmask[0], config.netmask[1], config.netmask[2], config.netmask[3]),
+                IPAddress(config.gateway[0], config.gateway[1], config.gateway[2], config.gateway[3])
+               );
+    LOG_PORT.print(F("Connecting with Static IP"));
+  }
 }
 
 void onWifiConnect(const WiFiEventStationModeGotIP &event) {
-    LOG_PORT.println("");
-    LOG_PORT.print(F("Connected with IP: "));
-    LOG_PORT.println(WiFi.localIP());
+  LOG_PORT.println("");
+  LOG_PORT.print(F("Connected with IP: "));
+  LOG_PORT.println(WiFi.localIP());
 
-    ourLocalIP = WiFi.localIP();
-    ourSubnetMask = WiFi.subnetMask();
+  ourLocalIP = WiFi.localIP();
+  ourSubnetMask = WiFi.subnetMask();
 
-    // Setup MQTT connection if enabled
-    if (config.mqtt)
-        connectToMqtt();
+#ifdef MQTT
+  // Setup MQTT connection if enabled
+  if (config.mqtt)
+    connectToMqtt();
+#endif
 
-    // Setup mDNS / DNS-SD
-    //TODO: Reboot or restart mdns when config.id is changed?
-    String chipId = String(ESP.getChipId(), HEX);
-    MDNS.setInstanceName(String(config.id + " (" + chipId + ")").c_str());
-    if (MDNS.begin(config.hostname.c_str())) {
-        MDNS.addService("http", "tcp", HTTP_PORT);
-        MDNS.addService("zcpp", "udp", ZCPP_PORT);
-        MDNS.addService("ddp", "udp", DDP_PORT);
-        MDNS.addService("e131", "udp", E131_DEFAULT_PORT);
-        MDNS.addServiceTxt("e131", "udp", "TxtVers", String(RDMNET_DNSSD_TXTVERS));
-        MDNS.addServiceTxt("e131", "udp", "ConfScope", RDMNET_DEFAULT_SCOPE);
-        MDNS.addServiceTxt("e131", "udp", "E133Vers", String(RDMNET_DNSSD_E133VERS));
-        MDNS.addServiceTxt("e131", "udp", "CID", chipId);
-        MDNS.addServiceTxt("e131", "udp", "Model", "ESPixelStick");
-        MDNS.addServiceTxt("e131", "udp", "Manuf", "Forkineye");
-    } else {
-        LOG_PORT.println(F("*** Error setting up mDNS responder ***"));
-    }
+  // Setup mDNS / DNS-SD
+  //TODO: Reboot or restart mdns when config.id is changed?
+  String chipId = String(ESP.getChipId(), HEX);
+  MDNS.setInstanceName(String(config.id + " (" + chipId + ")").c_str());
+  if (MDNS.begin(config.hostname.c_str())) {
+    MDNS.addService("http", "tcp", HTTP_PORT);
+    MDNS.addService("zcpp", "udp", ZCPP_PORT);
+    MDNS.addService("ddp", "udp", DDP_PORT);
+    MDNS.addService("e131", "udp", E131_DEFAULT_PORT);
+    MDNS.addServiceTxt("e131", "udp", "TxtVers", String(RDMNET_DNSSD_TXTVERS));
+    MDNS.addServiceTxt("e131", "udp", "ConfScope", RDMNET_DEFAULT_SCOPE);
+    MDNS.addServiceTxt("e131", "udp", "E133Vers", String(RDMNET_DNSSD_E133VERS));
+    MDNS.addServiceTxt("e131", "udp", "CID", chipId);
+    MDNS.addServiceTxt("e131", "udp", "Model", "WNRF");
+    MDNS.addServiceTxt("e131", "udp", "Manuf", "LabRat");
+  } else {
+    LOG_PORT.println(F("*** Error setting up mDNS responder ***"));
+  }
 }
 
 void onWiFiDisconnect(const WiFiEventStationModeDisconnected &event) {
-    LOG_PORT.println(F("*** WiFi Disconnected ***"));
+  LOG_PORT.println(F("*** WiFi Disconnected ***"));
 
-    // Pause MQTT reconnect while WiFi is reconnecting
-    mqttTicker.detach();
-    wifiTicker.once(2, connectWifi);
+#ifdef MQTT
+  // Pause MQTT reconnect while WiFi is reconnecting
+  mqttTicker.detach();
+#endif
+  wifiTicker.once(2, connectWifi);
 }
 
 // Subscribe to "n" universes, starting at "universe"
 void multiSub() {
-    uint8_t count;
-    ip_addr_t ifaddr;
-    ip_addr_t multicast_addr;
+  uint8_t count;
+  ip_addr_t ifaddr;
+  ip_addr_t multicast_addr;
 
-    count = uniLast - config.universe + 1;
-    ifaddr.addr = static_cast<uint32_t>(WiFi.localIP());
-    for (uint8_t i = 0; i < count; i++) {
-        multicast_addr.addr = static_cast<uint32_t>(IPAddress(239, 255,
-                (((config.universe + i) >> 8) & 0xff),
-                (((config.universe + i) >> 0) & 0xff)));
-        igmp_joingroup(&ifaddr, &multicast_addr);
-    }
+  count = uniLast - config.universe + 1;
+  ifaddr.addr = static_cast<uint32_t>(WiFi.localIP());
+  for (uint8_t i = 0; i < count; i++) {
+    multicast_addr.addr = static_cast<uint32_t>(IPAddress(239, 255,
+                          (((config.universe + i) >> 8) & 0xff),
+                          (((config.universe + i) >> 0) & 0xff)));
+    igmp_joingroup(&ifaddr, &multicast_addr);
+  }
 }
 
 void ZCPPSub() {
-    ip_addr_t ifaddr;
-    ifaddr.addr = static_cast<uint32_t>(ourLocalIP);
-    ip_addr_t multicast_addr;
-    multicast_addr.addr = static_cast<uint32_t>(IPAddress(224, 0, 30, 5));
-    igmp_joingroup(&ifaddr, &multicast_addr);
-    LOG_PORT.println(F("- ZCPP Subscribed to multicast 224.0.30.5"));
+  ip_addr_t ifaddr;
+  ifaddr.addr = static_cast<uint32_t>(ourLocalIP);
+  ip_addr_t multicast_addr;
+  multicast_addr.addr = static_cast<uint32_t>(IPAddress(224, 0, 30, 5));
+  igmp_joingroup(&ifaddr, &multicast_addr);
+  LOG_PORT.println(F("- ZCPP Subscribed to multicast 224.0.30.5"));
 }
 
 /////////////////////////////////////////////////////////
@@ -420,196 +428,198 @@ void ZCPPSub() {
 //
 /////////////////////////////////////////////////////////
 
+#ifdef MQTT
 void connectToMqtt() {
-    LOG_PORT.print(F("- Connecting to MQTT Broker "));
-    LOG_PORT.println(config.mqtt_ip);
-    mqtt.connect();
+  LOG_PORT.print(F("- Connecting to MQTT Broker "));
+  LOG_PORT.println(config.mqtt_ip);
+  mqtt.connect();
 }
 
 void onMqttConnect(bool sessionPresent) {
-    LOG_PORT.println(F("- MQTT Connected"));
+  LOG_PORT.println(F("- MQTT Connected"));
 
-    // Get retained MQTT state
-    mqtt.subscribe(config.mqtt_topic.c_str(), 0);
-    mqtt.unsubscribe(config.mqtt_topic.c_str());
+  // Get retained MQTT state
+  mqtt.subscribe(config.mqtt_topic.c_str(), 0);
+  mqtt.unsubscribe(config.mqtt_topic.c_str());
 
-    // Setup subscriptions
-    mqtt.subscribe(String(config.mqtt_topic + MQTT_SET_COMMAND_TOPIC).c_str(), 0);
+  // Setup subscriptions
+  mqtt.subscribe(String(config.mqtt_topic + MQTT_SET_COMMAND_TOPIC).c_str(), 0);
 
-    // Publish state
-    publishState();
+  // Publish state
+  publishState();
 
-    // Publish discovery
-    publishHA(config.mqtt_hadisco);
+  // Publish discovery
+  publishHA(config.mqtt_hadisco);
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-    LOG_PORT.println(F("- MQTT Disconnected"));
-    if (WiFi.isConnected()) {
-        mqttTicker.once(2, connectToMqtt);
-    }
+  LOG_PORT.println(F("- MQTT Disconnected"));
+  if (WiFi.isConnected()) {
+    mqttTicker.once(2, connectToMqtt);
+  }
 }
 
 void onMqttMessage(char* topic, char* payload,
-        AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
+                   AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
 
-    DynamicJsonDocument r(1024);
-    DeserializationError error = deserializeJson(r, payload);
+  DynamicJsonDocument r(1024);
+  DeserializationError error = deserializeJson(r, payload);
 
-    if (error) {
-        LOG_PORT.println("MQTT: Parsing failed");
-        return;
+  if (error) {
+    LOG_PORT.println("MQTT: Parsing failed");
+    return;
+  }
+
+  JsonObject root = r.as<JsonObject>();
+
+  // if its a retained message and we want clean session, ignore it
+  if ( properties.retain && config.mqtt_clean ) {
+    return;
+  }
+
+  bool stateOn = false;
+
+  if (root.containsKey("state")) {
+    if (strcmp(root["state"], LIGHT_ON) == 0) {
+      stateOn = true;
+    } else if (strcmp(root["state"], LIGHT_OFF) == 0) {
+      stateOn = false;
     }
+  }
 
-    JsonObject root = r.as<JsonObject>();
+  if (root.containsKey("brightness")) {
+    effects.setBrightness((float)root["brightness"] / 255.0);
+  }
 
-    // if its a retained message and we want clean session, ignore it
-    if ( properties.retain && config.mqtt_clean ) {
-        return;
-    }
+  if (root.containsKey("speed")) {
+    effects.setSpeed(root["speed"]);
+  }
 
-    bool stateOn = false;
+  if (root.containsKey("color")) {
+    effects.setColor({
+      root["color"]["r"],
+      root["color"]["g"],
+      root["color"]["b"]
+    });
+  }
 
-    if (root.containsKey("state")) {
-        if (strcmp(root["state"], LIGHT_ON) == 0) {
-            stateOn = true;
-        } else if (strcmp(root["state"], LIGHT_OFF) == 0) {
-            stateOn = false;
-        }
-    }
+  if (root.containsKey("effect")) {
+    // Set the explict effect provided by the MQTT client
+    effects.setEffect(root["effect"]);
+  }
 
-    if (root.containsKey("brightness")) {
-        effects.setBrightness((float)root["brightness"] / 255.0);
-    }
+  if (root.containsKey("reverse")) {
+    effects.setReverse(root["reverse"]);
+  }
 
-    if (root.containsKey("speed")) {
-        effects.setSpeed(root["speed"]);
-    }
+  if (root.containsKey("mirror")) {
+    effects.setMirror(root["mirror"]);
+  }
 
-    if (root.containsKey("color")) {
-        effects.setColor({
-            root["color"]["r"],
-            root["color"]["g"],
-            root["color"]["b"]
-        });
-    }
+  if (root.containsKey("allleds")) {
+    effects.setAllLeds(root["allleds"]);
+  }
 
-    if (root.containsKey("effect")) {
-        // Set the explict effect provided by the MQTT client
-        effects.setEffect(root["effect"]);
-    }
+  // Set data source based on state - Fall back to E131 when off
+  if (stateOn) {
+    if (effects.getEffect().equalsIgnoreCase("Disabled"))
+      effects.setEffect("Solid");
+    config.ds = DataSource::MQTT;
+  } else {
+    config.ds = DataSource::E131;
+    effects.clearAll();
+  }
 
-    if (root.containsKey("reverse")) {
-        effects.setReverse(root["reverse"]);
-    }
-
-    if (root.containsKey("mirror")) {
-        effects.setMirror(root["mirror"]);
-    }
-
-    if (root.containsKey("allleds")) {
-        effects.setAllLeds(root["allleds"]);
-    }
-
-    // Set data source based on state - Fall back to E131 when off
-    if (stateOn) {
-        if (effects.getEffect().equalsIgnoreCase("Disabled"))
-            effects.setEffect("Solid");
-        config.ds = DataSource::MQTT;
-    } else {
-        config.ds = DataSource::E131;
-        effects.clearAll();
-    }
-
-    publishState();
+  publishState();
 }
 
 void publishHA(bool join) {
 
-    // Setup HA discovery
-    String ha_config = config.mqtt_haprefix + "/light/" + String(ESP.getChipId(), HEX) + "/config";
+  // Setup HA discovery
+  String ha_config = config.mqtt_haprefix + "/light/" + String(ESP.getChipId(), HEX) + "/config";
 
-    if (join) {
-        DynamicJsonDocument root(1024);
-        root["name"] = config.id;
-        root["schema"] = "json";
-        root["state_topic"] = config.mqtt_topic;
-        root["command_topic"] = config.mqtt_topic + "/set";
-        root["rgb"] = "true";
-        root["brightness"] = "true";
-        root["effect"] = "true";
+  if (join) {
+    DynamicJsonDocument root(1024);
+    root["name"] = config.id;
+    root["schema"] = "json";
+    root["state_topic"] = config.mqtt_topic;
+    root["command_topic"] = config.mqtt_topic + "/set";
+    root["rgb"] = "true";
+    root["brightness"] = "true";
+    root["effect"] = "true";
 
-        // Populate the effect list
-        JsonArray effect_list = root.createNestedArray("effect_list");
-        // effect[0] is 'disabled', skip it
-        for (uint8_t i = 1; i < effects.getEffectCount(); i++) {
-            effect_list.add(effects.getEffectInfo(i)->name);
-        }
-
-        // Register the attributes topic
-        root["json_attributes_topic"] = config.mqtt_topic + "/attributes";
-
-        // Create a unique id using the chip id, and fill in the device properties
-        // to enable integration support in HomeAssistant.
-        root["unique_id"] = "ESPixelStick_" + String(ESP.getChipId(), HEX);
-        JsonObject device = root.createNestedObject("device");
-        device["identifiers"] = WiFi.macAddress();
-        device["manufacturer"] = "ESPixelStick";
-        device["model"] = String(config.channel_count / 3) + " Pixel Controller";
-        device["name"] = config.id;
-        device["sw_version"] = "ESPixelStick v" + String(VERSION);
-
-        char buffer[measureJson(root) + 1];
-        serializeJson(root, buffer, sizeof(buffer));
-        mqtt.publish(ha_config.c_str(), 0, true, buffer);
-
-        publishAttributes();
-    } else {
-        mqtt.publish(ha_config.c_str(), 0, true, "");
+    // Populate the effect list
+    JsonArray effect_list = root.createNestedArray("effect_list");
+    // effect[0] is 'disabled', skip it
+    for (uint8_t i = 1; i < effects.getEffectCount(); i++) {
+      effect_list.add(effects.getEffectInfo(i)->name);
     }
+
+    // Register the attributes topic
+    root["json_attributes_topic"] = config.mqtt_topic + "/attributes";
+
+    // Create a unique id using the chip id, and fill in the device properties
+    // to enable integration support in HomeAssistant.
+    root["unique_id"] = "WNRF_" + String(ESP.getChipId(), HEX);
+    JsonObject device = root.createNestedObject("device");
+    device["identifiers"] = WiFi.macAddress();
+    device["manufacturer"] = "WNRF";
+    device["model"] = String(config.channel_count / 3) + " Pixel Controller";
+    device["name"] = config.id;
+    device["sw_version"] = "WNRF v" + String(VERSION);
+
+    char buffer[measureJson(root) + 1];
+    serializeJson(root, buffer, sizeof(buffer));
+    mqtt.publish(ha_config.c_str(), 0, true, buffer);
+
+    publishAttributes();
+  } else {
+    mqtt.publish(ha_config.c_str(), 0, true, "");
+  }
 }
 
 void publishState() {
 
-    DynamicJsonDocument root(1024);
-    if ((config.ds != DataSource::E131 && config.ds != DataSource::ZCPP) && (!effects.getEffect().equalsIgnoreCase("Disabled")))
-        root["state"] = LIGHT_ON;
-    else
-        root["state"] = LIGHT_OFF;
+  DynamicJsonDocument root(1024);
+  if ((config.ds != DataSource::E131 && config.ds != DataSource::ZCPP) && (!effects.getEffect().equalsIgnoreCase("Disabled")))
+    root["state"] = LIGHT_ON;
+  else
+    root["state"] = LIGHT_OFF;
 
-    JsonObject color = root.createNestedObject("color");
-    color["r"] = effects.getColor().r;
-    color["g"] = effects.getColor().g;
-    color["b"] = effects.getColor().b;
-    root["brightness"] = effects.getBrightness()*255;
-    root["speed"] = effects.getSpeed();
-    if (!effects.getEffect().equalsIgnoreCase("Disabled")) {
-        root["effect"] = effects.getEffect();
-    }
-    root["reverse"] = effects.getReverse();
-    root["mirror"] = effects.getMirror();
-    root["allleds"] = effects.getAllLeds();
+  JsonObject color = root.createNestedObject("color");
+  color["r"] = effects.getColor().r;
+  color["g"] = effects.getColor().g;
+  color["b"] = effects.getColor().b;
+  root["brightness"] = effects.getBrightness() * 255;
+  root["speed"] = effects.getSpeed();
+  if (!effects.getEffect().equalsIgnoreCase("Disabled")) {
+    root["effect"] = effects.getEffect();
+  }
+  root["reverse"] = effects.getReverse();
+  root["mirror"] = effects.getMirror();
+  root["allleds"] = effects.getAllLeds();
 
-    char buffer[measureJson(root) + 1];
-    serializeJson(root, buffer, sizeof(buffer));
-    mqtt.publish(config.mqtt_topic.c_str(), 0, true, buffer);
+  char buffer[measureJson(root) + 1];
+  serializeJson(root, buffer, sizeof(buffer));
+  mqtt.publish(config.mqtt_topic.c_str(), 0, true, buffer);
 }
 
 void publishAttributes() {
-    String topic = config.mqtt_topic + "/attributes";
-    DynamicJsonDocument root(1024);
+  String topic = config.mqtt_topic + "/attributes";
+  DynamicJsonDocument root(1024);
 
-    // Publish the e131 attributes=
-    root["universe"] = config.universe;
-    root["universe_limit"] = config.universe_limit;
-    root["channel_start"] = config.channel_start;
-    root["channel_count"] = config.channel_count;
-    root["multicast"] = config.multicast;
+  // Publish the e131 attributes=
+  root["universe"] = config.universe;
+  root["universe_limit"] = config.universe_limit;
+  root["channel_start"] = config.channel_start;
+  root["channel_count"] = config.channel_count;
+  root["multicast"] = config.multicast;
 
-    char buffer[measureJson(root) + 1];
-    serializeJson(root, buffer, sizeof(buffer));
-    mqtt.publish(topic.c_str(), 0, true, buffer);
+  char buffer[measureJson(root) + 1];
+  serializeJson(root, buffer, sizeof(buffer));
+  mqtt.publish(topic.c_str(), 0, true, buffer);
 }
+#endif
 
 /////////////////////////////////////////////////////////
 //
@@ -619,54 +629,54 @@ void publishAttributes() {
 
 // Configure and start the web server
 void initWeb() {
-    // Handle OTA update from asynchronous callbacks
-    Update.runAsync(true);
+  // Handle OTA update from asynchronous callbacks
+  Update.runAsync(true);
 
-    // Add header for SVG plot support?
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+  // Add header for SVG plot support?
+  DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
 
-    // Setup WebSockets
-    ws.onEvent(wsEvent);
-    web.addHandler(&ws);
+  // Setup WebSockets
+  ws.onEvent(wsEvent);
+  web.addHandler(&ws);
 
-    // Heap status handler
-    web.on("/heap", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/plain", String(ESP.getFreeHeap()));
-    });
+  // Heap status handler
+  web.on("/heap", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send(200, "text/plain", String(ESP.getFreeHeap()));
+  });
 
-    // JSON Config Handler
-    web.on("/conf", HTTP_GET, [](AsyncWebServerRequest *request) {
-        String jsonString;
-        serializeConfig(jsonString, true);
-        request->send(200, "text/json", jsonString);
-    });
+  // JSON Config Handler
+  web.on("/conf", HTTP_GET, [](AsyncWebServerRequest * request) {
+    String jsonString;
+    serializeConfig(jsonString, true);
+    request->send(200, "text/json", jsonString);
+  });
 
-    // Firmware upload handler - only in station mode
-    web.on("/updatefw", HTTP_POST, [](AsyncWebServerRequest *request) {
-        ws.textAll("X6");
-    }, handle_fw_upload).setFilter(ON_STA_FILTER);
+  // Firmware upload handler - only in station mode
+  web.on("/updatefw", HTTP_POST, [](AsyncWebServerRequest * request) {
+    ws.textAll("X6");
+  }, handle_fw_upload).setFilter(ON_STA_FILTER);
 
-    // Static Handler
-    web.serveStatic("/", SPIFFS, "/www/").setDefaultFile("index.html");
+  // Static Handler
+  web.serveStatic("/", SPIFFS, "/www/").setDefaultFile("index.html");
 
-    // Raw config file Handler - but only on station
-//  web.serveStatic("/config.json", SPIFFS, "/config.json").setFilter(ON_STA_FILTER);
+  // Raw config file Handler - but only on station
+  //  web.serveStatic("/config.json", SPIFFS, "/config.json").setFilter(ON_STA_FILTER);
 
-    web.onNotFound([](AsyncWebServerRequest *request) {
-        request->send(404, "text/plain", "Page not found");
-    });
+  web.onNotFound([](AsyncWebServerRequest * request) {
+    request->send(404, "text/plain", "Page not found");
+  });
 
-    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Origin"), "*");
+  DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Origin"), "*");
 
-    // Config file upload handler - only in station mode
-    web.on("/config", HTTP_POST, [](AsyncWebServerRequest *request) {
-        ws.textAll("X6");
-    }, handle_config_upload).setFilter(ON_STA_FILTER);
+  // Config file upload handler - only in station mode
+  web.on("/config", HTTP_POST, [](AsyncWebServerRequest * request) {
+    ws.textAll("X6");
+  }, handle_config_upload).setFilter(ON_STA_FILTER);
 
-    web.begin();
+  web.begin();
 
-    LOG_PORT.print(F("- Web Server started on port "));
-    LOG_PORT.println(HTTP_PORT);
+  LOG_PORT.print(F("- Web Server started on port "));
+  LOG_PORT.println(HTTP_PORT);
 }
 
 /////////////////////////////////////////////////////////
@@ -689,6 +699,7 @@ void validateConfig() {
     else if (config.channel_start > config.universe_limit)
         config.channel_start = config.universe_limit;
 
+#ifdef MQTT
     // Set default MQTT port if missing
     if (config.mqtt_port == 0)
         config.mqtt_port = MQTT_PORT;
@@ -702,6 +713,7 @@ void validateConfig() {
     if (!config.mqtt_haprefix.length()) {
         config.mqtt_haprefix = "homeassistant";
     }
+#endif
 
 #if defined(ESPS_MODE_PIXEL)
     // Set Mode
@@ -850,11 +862,13 @@ void updateConfig() {
     if (config.multicast)
         multiSub();
 
+#ifdef MQTT
     // Update Home Assistant Discovery if enabled
     if (config.mqtt) {
         publishHA(config.mqtt_hadisco);
         publishState();
     }
+#endif
 }
 
 // De-Serialize Network config
@@ -949,6 +963,7 @@ void dsDeviceConfig(const JsonObject &json) {
         LOG_PORT.println("No e131 settings found.");
     }
 
+#ifdef MQTT
     // MQTT
     if (json.containsKey("mqtt")) {
         JsonObject mqttJson = json["mqtt"];
@@ -966,6 +981,7 @@ void dsDeviceConfig(const JsonObject &json) {
     {
         LOG_PORT.println("No mqtt settings found.");
     }
+#endif
 
 #if defined(ESPS_MODE_PIXEL)
     // Pixel
@@ -1110,7 +1126,7 @@ void serializeConfig(String &jsonString, bool pretty, bool creds) {
     _effects["idleenabled"] = config.effect_idleenabled;
     _effects["idletimeout"] = config.effect_idletimeout;
 
-
+#ifdef MQTT
     // MQTT
     JsonObject _mqtt = json.createNestedObject("mqtt");
     _mqtt["enabled"] = config.mqtt;
@@ -1122,6 +1138,7 @@ void serializeConfig(String &jsonString, bool pretty, bool creds) {
     _mqtt["clean"] = config.mqtt_clean;
     _mqtt["hadisco"] = config.mqtt_hadisco;
     _mqtt["haprefix"] = config.mqtt_haprefix.c_str();
+#endif
 
     // E131
     JsonObject e131 = json.createNestedObject("e131");
@@ -1394,7 +1411,7 @@ void loop() {
                       {
                           LOG_PORT.println("ZCPP Discovery received.");
                           int serialPorts = 0;
-			  int pixelPorts = 0;
+                          int pixelPorts = 0;
                           int wnrfPorts = 0;
         #if defined(ESPS_MODE_PIXEL)
                             pixelPorts = 1;
@@ -1560,7 +1577,8 @@ void loop() {
             }
     }
 
-  if (doShow) {
+    if (doShow) {
+        /* LabRat - replace with != DataSource::E131 ?? */
         if ( (config.ds == DataSource::WEB)
           || (config.ds == DataSource::IDLEWEB)
           || (config.ds == DataSource::ZCPP)
@@ -1569,13 +1587,28 @@ void loop() {
                 effects.run();
         }
 
-    /* Streaming refresh */
+        /* Streaming refresh */
         if (out_driver.canRefresh())
             out_driver.show();
-  }
+    }
 
 // workaround crash - consume incoming bytes on serial port
     if (LOG_PORT.available()) {
-        while (LOG_PORT.read() >= 0);
+        int8_t inch = LOG_PORT.read();
+
+        while (inch >=0 ) {
+           switch (inch) {
+              case 'q':  out_driver.triggerPoll(); break; // QUERY DEVICE
+              case 'd':  out_driver.sendNewDevId(0x0001,0x0042); break; // Set DEVICE ID
+              case 'c':  out_driver.sendNewChan(0x0001,101); break;
+              case 's':  out_driver.sendNewStart(0x0001,142); break;
+              default: break;
+           }
+           inch = LOG_PORT.read();
+        }
+
     }
+
+    /* Was there a NRF payload? */
+    out_driver.checkRx();
 }

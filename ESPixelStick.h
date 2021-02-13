@@ -20,7 +20,7 @@
 #ifndef ESPIXELSTICK_H_
 #define ESPIXELSTICK_H_
 
-const char VERSION[] = "3.2";
+const char VERSION[] = "0.1";
 const char BUILD_DATE[] = __DATE__;
 
 // Mode configuration moved to Mode.h to ease things with Travis
@@ -117,6 +117,7 @@ typedef struct {
     uint16_t effect_idletimeout;
 
 
+#ifdef MQTT
     /* MQTT */
     bool        mqtt;           /* Use MQTT? */
     String      mqtt_ip = " ";
@@ -127,6 +128,7 @@ typedef struct {
     bool        mqtt_clean;
     bool        mqtt_hadisco;
     String      mqtt_haprefix;
+#endif
 
     /* E131 */
     uint16_t    universe;       /* Universe to listen for */

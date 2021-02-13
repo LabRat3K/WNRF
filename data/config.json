@@ -1,7 +1,7 @@
 {
   "network": {
-    "ssid": "",
-    "passphrase": "",
+    "ssid": "NRFDEV",
+    "passphrase": "BLINKYFLASHY$22",
     "ip": [
       192,
       168,
@@ -21,13 +21,11 @@
       1
     ],
     "dhcp": true,
-    "ap_fallback": false
+    "ap_fallback": true
   },
-
   "device": {
-    "id": "ESPixelStick"
+    "id": "WNRF"
   },
-
   "e131": {
     "universe": 1,
     "universe_limit": 512,
@@ -35,13 +33,11 @@
     "channel_count": 512,
     "multicast": false
   },
-
   "pixel": {
     "type": 0,
     "color": 0,
     "gamma": true
   },
-
   "serial": {
     "type": 0,
     "baudrate": 57600
