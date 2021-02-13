@@ -26,6 +26,9 @@ extern PixelDriver  out_driver;     // Pixel object
 #elif defined(ESPS_MODE_SERIAL)
 #include "SerialDriver.h"
 extern SerialDriver out_driver;     // Serial object
+#elif defined(ESPS_MODE_WNRF)
+#include "WnrfDriver.h"
+extern WnrfDriver out_driver;       // Wnrf object
 #endif
 
 extern EffectEngine effects;    // EffectEngine for test modes
@@ -152,6 +155,24 @@ void procE(uint8_t *data, AsyncWebSocketClient *client) {
             s_baud["230400"] = static_cast<uint32_t>(BaudRate::BR_230400);
             s_baud["250000"] = static_cast<uint32_t>(BaudRate::BR_250000);
             s_baud["460800"] = static_cast<uint32_t>(BaudRate::BR_460800);
+
+#elif defined (ESPS_MODE_WNRF)
+            JsonObject nrf_baud = json.createNestedObject("nrf_baud");
+            nrf_baud["1 Mbps"] = static_cast<uint8_t>(NrfBaud::BAUD_1Mbps);
+            nrf_baud["2 Mbps"] = static_cast<uint8_t>(NrfBaud::BAUD_2Mbps);
+
+            JsonObject nrf_chan = json.createNestedObject("nrf_chan");
+            nrf_chan["Legacy (80)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_LEGACY);
+            nrf_chan["(101)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_A);
+            nrf_chan["(103)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_B);
+            nrf_chan["(105)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_C);
+            nrf_chan["(107)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_D);
+            nrf_chan["(109)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_E);
+            nrf_chan["(111)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_F);
+            nrf_chan["(113)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_G);
+            nrf_chan["(115)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_H);
+            nrf_chan["(117)"] = static_cast<uint8_t>(NrfChan::NRFCHAN_I);
+
 #endif
 
             String response;
@@ -362,6 +383,8 @@ void procV(uint8_t *data, AsyncWebSocketClient *client) {
                 client->binary(&out_driver.getData()[1], config.channel_count);
             else
                 client->binary(&out_driver.getData()[2], config.channel_count);
+#elif defined(ESPS_MODE_WNRF)
+            client->binary(out_driver.getData(), config.channel_count);
 #endif
             break;
         }
