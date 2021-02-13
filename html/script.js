@@ -186,6 +186,14 @@ $(function() {
        }
     });
 
+    $('#nrf_legacy').click(function() {
+        if ($(this).is(':checked')) {
+            $('.nrf').addClass('hidden');
+       } else {
+            $('.nrf').removeClass('hidden');
+       }
+    });
+
     $('#p_gammaVal').change(function() {
             sendGamma();
     });
@@ -612,7 +620,7 @@ function getConfig(data) {
 
     // Output Config
     $('.odiv').addClass('hidden');
-    if (config.device.mode & 0x01) {  // Pixel
+    if (config.device.mode == 0x00) {  // Pixel
         mode = 'pixel';
         $('#o_pixel').removeClass('hidden');
         $('#p_count').val(config.e131.channel_count / 3);
@@ -640,7 +648,7 @@ function getConfig(data) {
         $('#p_count').trigger('change');
     }
 
-    if (config.device.mode & 0x02) {  // Serial
+    if (config.device.mode == 0x01) {  // Serial
         mode = 'serial';
         $('#o_serial').removeClass('hidden');
         $('#s_count').val(config.e131.channel_count);
@@ -658,6 +666,18 @@ function getConfig(data) {
         // Trigger updated elements
         $('#s_proto').trigger('click');
         $('#s_count').trigger('change');
+    }
+
+    if (config.device.mode == 0x02) {  // WNRF
+        mode = 'wnrf';
+        $('#nrf_legacy').prop('checked', config.wnrf.enabled);
+        $('#nrf_chan').val(config.wnrf.nrf_chan);
+        $('#nrf_baud').val(config.wnrf.nrf_baud);
+        if ($('#nrf_legacy').is(':checked')) {
+            $('.nrf').addClass('hidden');
+         } else {
+            $('.nrf').removeClass('hidden');
+         }
     }
 }
 
@@ -838,6 +858,11 @@ function submitConfig() {
             'serial': {
                 'type': parseInt($('#s_proto').val()),
                 'baudrate': parseInt($('#s_baud').val())
+            },
+            'wnrf': {
+                'nrf_chan': parseInt($('#nrf_chan').val()),
+                'nrf_baud': parseInt($('#nrf_baud').val()),
+                'enabled' : $('#nrf_legacy').prop('checked')
             }
     };
 

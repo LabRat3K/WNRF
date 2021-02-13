@@ -25,6 +25,7 @@
 const char ssid[] = "ENTER_SSID_HERE";
 const char passphrase[] = "ENTER_PASSPHRASE_HERE";
 
+
 /*****************************************/
 /*         END - Configuration           */
 /*****************************************/
@@ -102,9 +103,14 @@ IPAddress           ourSubnetMask;
 PixelDriver     out_driver;         // Pixel object
 #elif defined(ESPS_MODE_SERIAL)
 SerialDriver    out_driver;         // Serial object
+#elif defined(ESPS_MODE_WNRF)
+WnrfDriver      out_driver;
 #else
 #error "No valid output mode defined."
 #endif
+
+#define LED_WIFI 2
+#define LED_NRF  D10
 
 /////////////////////////////////////////////////////////
 //
@@ -132,6 +138,15 @@ void setup() {
     // Initial pin states
     pinMode(DATA_PIN, OUTPUT);
     digitalWrite(DATA_PIN, LOW);
+#endif
+
+#if defined (LED_WIFI)
+    pinMode(LED_WIFI,OUTPUT);
+    digitalWrite(LED_WIFI, HIGH);
+#endif
+#if defined (LED_NRF)
+    pinMode(LED_NRF, OUTPUT);
+    digitalWrite(LED_NRF, LOW);
 #endif
     // Setup serial log port
     LOG_PORT.begin(115200);
@@ -241,6 +256,9 @@ void setup() {
         }
     }
 
+#if defined(LED_WIFI)
+    digitalWrite(LED_WIFI, LOW);
+#endif
     wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWiFiDisconnect);
 
     LOG_PORT.print("IP : ");
@@ -687,8 +705,7 @@ void validateConfig() {
 
 #if defined(ESPS_MODE_PIXEL)
     // Set Mode
-    config.devmode.MPIXEL = true;
-    config.devmode.MSERIAL = false;
+    config.devmode = MODE_PIXEL;
 
     // Generic channel limits for pixels
     if (config.channel_count % 3)
@@ -722,8 +739,7 @@ void validateConfig() {
     }
 #elif defined(ESPS_MODE_SERIAL)
     // Set Mode
-    config.devmode.MPIXEL = false;
-    config.devmode.MSERIAL = true;
+    config.devmode = MODE_SERIAL;
 
     // Generic serial channel limits
     if (config.channel_count > RENARD_LIMIT)
@@ -739,6 +755,13 @@ void validateConfig() {
         config.baudrate = BaudRate::BR_460800;
     else if (config.baudrate < BaudRate::BR_38400)
         config.baudrate = BaudRate::BR_57600;
+#elif defined(ESPS_MODE_WNRF)
+    // Set Mode
+    config.devmode = MODE_NRF;
+    if (config.nrf_legacy)
+        config.channel_count = 32;
+    else
+        config.channel_count = 512;
 #endif
 
     if (config.effect_speed < 1)
@@ -811,6 +834,9 @@ void updateConfig() {
     out_driver.begin(&SEROUT_PORT, config.serial_type, config.channel_count, config.baudrate);
     effects.begin(&out_driver, config.channel_count / 3 );
 
+#elif defined(ESPS_MODE_WNRF)
+    out_driver.begin(config.nrf_baud, config.nrf_chan, config.channel_count);
+    effects.begin(&out_driver, config.channel_count / 3 );
 #endif
 
     LOG_PORT.print(F("- Listening for "));
@@ -966,6 +992,23 @@ void dsDeviceConfig(const JsonObject &json) {
     {
         LOG_PORT.println("No serial settings found.");
     }
+#elif defined(ESPS_MODE_WNRF)
+    if (json.containsKey("wnrf")) {
+        config.nrf_legacy = (json["wnrf"]["enabled"]);
+        if (config.nrf_legacy) {
+            config.nrf_chan = NrfChan::NRFCHAN_LEGACY;
+            config.nrf_baud = NrfBaud::BAUD_2Mbps;
+            config.channel_count = 32;
+        } else {
+            config.nrf_chan = NrfChan(static_cast<uint8_t>(json["wnrf"]["nrf_chan"]));
+            config.nrf_baud = NrfBaud(static_cast<uint32_t>(json["wnrf"]["nrf_baud"]));
+            config.channel_count = 512;
+        }
+    }
+    else
+    {
+        LOG_PORT.println("No WNRF settings found.");
+    }
 #endif
 }
 
@@ -1026,7 +1069,7 @@ void serializeConfig(String &jsonString, bool pretty, bool creds) {
     // Device
     JsonObject device = json.createNestedObject("device");
     device["id"] = config.id.c_str();
-    device["mode"] = config.devmode.toInt();
+    device["mode"] = config.devmode;
 
     // Network
     JsonObject network = json.createNestedObject("network");
@@ -1103,6 +1146,11 @@ void serializeConfig(String &jsonString, bool pretty, bool creds) {
     JsonObject serial = json.createNestedObject("serial");
     serial["type"] = static_cast<uint8_t>(config.serial_type);
     serial["baudrate"] = static_cast<uint32_t>(config.baudrate);
+#elif defined(ESPS_MODE_WNRF)
+    JsonObject wnrf = json.createNestedObject("wnrf");
+    wnrf["enabled"]  = config.nrf_legacy;
+    wnrf["nrf_chan"] = static_cast<uint8_t>(config.nrf_chan);
+    wnrf["nrf_baud"] = static_cast<uint8_t>(config.nrf_baud);
 #endif
 
     if (pretty)
@@ -1191,6 +1239,9 @@ void sendZCPPConfig(ZCPP_packet_t& packet) {
               break;
         }
 
+#elif defined(ESPS_MODE_WNRF)
+       // Not sure what to put here for ZCPP protocol
+
 #endif
         packet.QueryConfigurationResponse.PortConfig[0].channels = ntohl((uint32_t)config.channel_count);
 
@@ -1220,11 +1271,13 @@ void sendZCPPConfig(ZCPP_packet_t& packet) {
 
         packet.QueryConfigurationResponse.PortConfig[0].brightness = config.briteVal * 100.0f;
         packet.QueryConfigurationResponse.PortConfig[0].gamma = config.gammaVal * 10;
-#else
+#elif defined(ESPS_MODE_SERIAL)
         packet.QueryConfigurationResponse.PortConfig[0].grouping = 0;
         packet.QueryConfigurationResponse.PortConfig[0].directionColourOrder = 0;
         packet.QueryConfigurationResponse.PortConfig[0].brightness = 100.0f;
         packet.QueryConfigurationResponse.PortConfig[0].gamma = 0;
+#elif defined(ESPS_MODE_WNRF)
+        // Or here... 
 #endif
     }
 
@@ -1340,12 +1393,15 @@ void loop() {
                   case ZCPP_TYPE_DISCOVERY: // discovery
                       {
                           LOG_PORT.println("ZCPP Discovery received.");
-                          int pixelPorts = 0;
                           int serialPorts = 0;
+			  int pixelPorts = 0;
+                          int wnrfPorts = 0;
         #if defined(ESPS_MODE_PIXEL)
                             pixelPorts = 1;
         #elif defined(ESPS_MODE_SERIAL)
                             serialPorts = 1;
+        #elif defined(ESPS_MODE_WNRF)
+                            wnrfPorts = 1;
         #endif
                           char version[9];
                           memset(version, 0x00, sizeof(version));
@@ -1385,6 +1441,7 @@ void loop() {
                                     case ZCPP_PROTOCOL_RENARD:
                                         config.serial_type = SerialType::RENARD;
                                         break;
+#elif defined(ESPS_MODE_WNRF)
 #endif
                                     default:
                                         LOG_PORT.print("Attempt to configure invalid protocol ");

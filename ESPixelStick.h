@@ -39,6 +39,8 @@ const char BUILD_DATE[] = __DATE__;
 #include "PixelDriver.h"
 #elif defined(ESPS_MODE_SERIAL)
 #include "SerialDriver.h"
+#elif defined(ESPS_MODE_WNRF)
+#include "WnrfDriver.h"
 #endif
 
 #include "EffectEngine.h"
@@ -68,14 +70,9 @@ const char BUILD_DATE[] = __DATE__;
 #define CONFIG_MAX_SIZE 4096    /* Sanity limit for config file */
 
 // Pixel Types
-class DevCap {
- public:
-    bool MPIXEL : 1;
-    bool MSERIAL : 1;
-    uint8_t toInt() {
-        return (MSERIAL << 1 | MPIXEL);
-    }
-};
+#define MODE_PIXEL  (0x00)
+#define MODE_SERIAL (0x01)
+#define MODE_NRF    (0x02)
 
 // Data Source to use
 enum class DataSource : uint8_t {
@@ -91,7 +88,7 @@ enum class DataSource : uint8_t {
 typedef struct {
     /* Device */
     String      id;             /* Device ID */
-    DevCap      devmode;        /* Used for reporting device mode, not stored */
+    uint8_t     devmode;        /* Used for reporting device mode, not stored */
     DataSource  ds;             /* Used to track current data source, not stored */
 
 
@@ -150,6 +147,10 @@ typedef struct {
     /* Serial */
     SerialType  serial_type;    /* Serial type */
     BaudRate    baudrate;       /* Baudrate */
+#elif defined(ESPS_MODE_WNRF)
+    NrfChan     nrf_chan;       /* Radio Frequency       */
+    NrfBaud     nrf_baud;       /* Baudrate 250k/1Mb/2Mb */
+    bool        nrf_legacy;     /* Support Early NRF designs (32 byte payload) */
 #endif
 } config_t;
 
