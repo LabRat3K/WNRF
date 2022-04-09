@@ -51,6 +51,12 @@ $(function() {
             $('#update').modal();
         });
 
+        // Hex file selection and upload
+        $('#hex').change(function () {
+            $('#wnrfu').submit();
+            $('#hexup').modal();
+        });
+
         // Color Picker
         $('.color').colorPicker({
             buildCallback: function($elm) {
@@ -189,8 +195,14 @@ $(function() {
     $('#nrf_legacy').click(function() {
         if ($(this).is(':checked')) {
             $('.nrf').addClass('hidden');
+            $('.devadmin').addClass('hidden');
+            $('.devchk').addClass('hidden');
        } else {
             $('.nrf').removeClass('hidden');
+            $('.devchk').removeClass('hidden');
+            if (document.getElementById('dev_admin').checked == true) {
+               $('.devadmin').removeClass('hidden');
+            }
        }
     });
 
@@ -626,16 +638,47 @@ function getDevices(data) {
        table.deleteRow(i);
     }
 
+    var j = 1;
     for (var i in devlist) {
-           var row = table.insertRow(1);
+           var row = table.insertRow(j);
            row.insertCell(0).innerHTML= devlist[i].dev_id;
            row.insertCell(1).innerHTML= devlist[i].type;
-           row.insertCell(2).innerHTML= ((devlist[i].blv>>4)&0xF0)+'.'+(devlist[i].blv&0x0F);
-           row.insertCell(3).innerHTML= devlist[i].apm;
-           row.insertCell(4).innerHTML= ((devlist[i].apv>>4)&0xF0)+'.'+(devlist[i].apv&0x0F);
-           row.insertCell(5).innerHTML= devlist[i].start;
-           row.insertCell(6).innerHTML= "EDIT";
+           row.insertCell(2).innerHTML= ((devlist[i].apv>>4)&0x0F)+'.'+(devlist[i].apv&0x0F);
+           row.insertCell(3).innerHTML= devlist[i].start;
+           row.insertCell(4).innerHTML= "<input type=\"radio\" id=\""+devlist[i].dev_id+"\" onClick=\"editDevice('"+i+"','"+devlist[i].type+"',"+devlist[i].blv+","+devlist[i].apm+","+devlist[i].apv+","+devlist[i].start+");\">";
+           j++;
     }
+}
+
+function editDevice(devid,dtype,blv, apm, apv,start) {
+    var table = document.getElementById("nrf_list");
+
+
+     $('.devedit').removeClass('hidden');
+     $('#ed_devid').text(devid);
+     $('#ed_type').text(dtype);
+     $('#ed_blv').text(((blv>>4)&0x0F)+'.'+((blv&0x0F)));
+     $('#ed_apm').text(apm);
+     $('#ed_apv').text( ((apv>>4)&0x0F)+'.'+((apv&0x0F)));
+
+     $('#s_chanid').val(start);
+
+     document.getElementById(devid).checked = false;
+
+}
+
+function editChan() {
+    var json = {
+            'device': {
+                'devid': $('#ed_devid').text(),
+                'chan' : $('#s_chanid').val()
+            }
+        };
+    wsEnqueue('D2' + JSON.stringify(json));
+}
+
+function doneEdit() {
+     $('.devedit').addClass('hidden');
 }
 
 function getConfig(data) {

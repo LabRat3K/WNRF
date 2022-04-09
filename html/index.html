@@ -267,19 +267,23 @@
     <div id="nrf" class="mdiv hidden anchor">
       <fieldset>
         <form class="form-horizontal" onsubmit="return false">
-          <!-- WNRF Configuration -->
           <legend class="esps-legend">nRF Configuration</legend>
+
+        <!-- Legacy Checkbox -->
           <div class="form-group">
             <div class="col-sm-offset-2 col-sm-10">
               <div class="checkbox"><label><input type="checkbox" id="nrf_legacy" name="nrf_legacy"> NRF Legacy </label></div>
             </div>
           </div>
+
+        <!-- Header, Channel, and Baud -->
           <div class="form-group nrf">
             <label class="control-label col-sm-2" for="nrf_chan">NRF Channel</label>
                <div class="col-sm-3"><select class="form-control" id="nrf_chan" name="nrf_chan"></select></div>
             <label class="control-label col-sm-2" for="nrf_baud">NRF Baud</label>
                <div class="col-sm-3"><select class="form-control" id="nrf_baud" name="nrf_baud"></select></div>
           </div>
+
         <!-- nRF Config Save -->
           <div class="form-group">
             <div class="col-sm-offset-2 col-sm-10">
@@ -287,9 +291,10 @@
             </div>
           </div>
         </form>
-        <!-- Client Firmware -->
+
+      <!-- Enable Admin Checkbox -->
         <form class="form-horizontal" onsubmit="return false">
-          <div class="form-group">
+          <div class="form-group devchk">
             <div class="col-sm-offset-2 col-sm-10">
               <div class="checkbox"><label><input type="checkbox" id="dev_admin" name="dev_admin"> Device Admin </label></div>
             </div>
@@ -299,35 +304,75 @@
 
       <div id="devadmin" class="form-group devadmin hidden">
         <fieldset>
+          <!-- Firmware Upload -->
           <div class="col-sm-6">
             <legend class="esps-legend">Client Firmware</legend>
             <div class = "form-group">
               <label class="control-label col-sm-2" for="nrf_fw">Hex File:</label>
               <span id="nrf_fw"></span><BR>
-              <form method = "POST" action = "/wnrfu" enctype="multipart/form-data">
-                <input type="file" name="data"/><BR>
-                <div class="col-sm-offset-2 col-sm-10">
-                  <button type="button" onclick="submit()" class="btn btn-primary">UPLOAD</button>
-                </div>
+              <form method = "POST" id="wnrfu" action = "/wnrfu" enctype="multipart/form-data">
+                <label class="btn btn-primary btn-file">
+                   Upload .HEX <input type="file" id="hex" accept=".hex" style="display: none;" name="data"/>
+                </label>
               </form>	
             </div>
           </div>
+
+          <!-- Device List-->
           <div class="col-sm-6">
-          <fieldset>
-            <legend class="esps-legend">Client Devices</legend>
-            <table class="esps-table" id="nrf_list">
-            <tr><td><b>DevId</b></td>
-                <td><b>Type</b></td>
-                <td><b>Loader</b></td>
-                <td><b>APP Magic</b></td>
-                <td><b>APP Version</b></td>
-                <td><b>Channel</b></td>
-                <td><b></td></tr>
-            </table>
-          </fieldset>
+            <fieldset>
+              <legend class="esps-legend">Client Devices</legend>
+              <table class="esps-table" id="nrf_list">
+              <tr><td><b>Device:</b></td>
+                  <td><b>Type</b></td>
+                  <td><b>APP Version</b></td>
+                  <td><b>Channel</b></td>
+                  <td><b>Edit</td></tr>
+              </table>
+            </fieldset>
+          </div>
         </fieldset>
+	<!--- Device EDIT form -->
+        <fieldset>
+          <div id="devedit" class="form-group devedit hidden">
+             <form class="form-horizontal" onsubmit="return false">
+             <legend class="esps-legend">Device Edit</legend>
+               <div class="form-group">
+                 <label class="control-label col-sm-3">Device ID</label>
+                 <div class="col-sm-9"><p class="form-control-static" id="ed_devid"><!--/p--></div>
+               </div>
+               <div class="form-group">
+                 <label class="control-label col-sm-3">Type</label>
+                 <div class="col-sm-9"><p class="form-control-static" id="ed_type"></p></div>
+               </div>
+               <div class="form-group">
+                 <label class="control-label col-sm-3">Loader</label>
+                 <div class="col-sm-9"><p class="form-control-static" id="ed_blv"></p></div>
+               </div>
+               <div class="form-group">
+                 <label class="control-label col-sm-3">FW Magic No.</label>
+                 <div class="col-sm-9"><p class="form-control-static" id="ed_apm"></p></div>
+               </div>
+               <div class="form-group">
+                 <label class="control-label col-sm-3">FW Version</label>
+                 <div class="col-sm-9"><p class="form-control-static" id="ed_apv">
+                   <div class="form-group"><p><button type="button" onclick="submit()" class="btn btn-danger">OTA LOAD</button></p></div>
+                   </p></div>
+               </div>
+               <div class="form-group">
+                 <label class="control-label col-sm-3">Start Channel</label>
+                 <div class="col-sm-9"><p class="form-control-static">
+                       <input size="4" maxsize="4" type="text" class="form-control" id="s_chanid" title="E.131 channel." onchange="editChan()"></td></tr>
+                    </p></div>
+               </div>
+               <div class="form-group"><p><button type="button" onclick="doneEdit()" class="btn btn-primary">Done</button></p></div>
+              </form>
+          </div>
+        </fieldset>
+       <!--End of Device Edit Form-->
       </div>
     </div>
+
     <!-- Effects configuration -->
     <div id="effects" class="mdiv hidden anchor">
       <fieldset>
@@ -503,6 +548,21 @@
         </div>
         <div class="modal-body">
           <p>Firmware update in progress...</p>
+          <div class="bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- HexUpdate Modal -->
+  <div id="hexup" class="modal fade" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title">Client FW Uploading</h4>
+        </div>
+        <div class="modal-body">
+          <p>Hex file upload in progress...</p>
           <div class="bar"></div>
         </div>
       </div>

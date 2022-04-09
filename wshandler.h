@@ -203,6 +203,8 @@ void procE(uint8_t *data, AsyncWebSocketClient *client) {
 
 // Device Admin handler
 void procD(uint8_t *data, AsyncWebSocketClient *client) {
+    DynamicJsonDocument json(1024);
+    DeserializationError error = deserializeJson(json, reinterpret_cast<char*>(data + 2));
     switch (data[1]) {
         case 'A': out_driver.enableAdmin(); break;  // Turn off the Streaming Output
         case 'a': out_driver.disableAdmin(); break; // Turn on the Streaming Output
@@ -210,6 +212,9 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
 //      Device Update: Change DevID?
 //      Device Update: Change Start Address
 //      Device Update: Push Firmware
+        case '2':
+            LOG_PORT.println(F("D2 channel update request**"));
+            break;
         default : // Do Nothing
             break;
     }
@@ -412,13 +417,13 @@ void procT(uint8_t *data, AsyncWebSocketClient *client) {
 
 void procN(uint8_t *data, AsyncWebSocketClient *client) {
     String response;
-    DynamicJsonDocument json(1024);
+    DynamicJsonDocument json(2048);
 
     switch (data[1]) {
        case '1': {  // List of any NRF devices
             JsonObject devList = json.createNestedObject("deviceList");
             //for(int i=0; i < effects.getEffectCount(); i++){
-            for(int i=0; i < 3; i++){
+            for(int i=0; i < 13; i++){
                char name[8];
                 snprintf(name,7,"1D00%2.2x",i);
                 JsonObject device = devList.createNestedObject(name);
@@ -426,9 +431,9 @@ void procN(uint8_t *data, AsyncWebSocketClient *client) {
                    device["type"] = "1823";
                    device["blv"]=1; /* Boot Loader Version */
                    device["apm"]=42; /* App Magic Number */
-                   snprintf(name,7,"1%1.1x",millis()&0x0F);
+                   snprintf(name,7,"%d",0x10 |millis()&0x0F);
                    device["apv"]=name; /* Boot Loader Version */
-                   snprintf(name,7,"%d",i*42);
+                   snprintf(name,7,"%d",i*32);
                    device["start"] = name; /* Other Parameters? */
             }
 
