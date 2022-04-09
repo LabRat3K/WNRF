@@ -610,8 +610,7 @@ function getElements(data) {
         for (var j in elements[i]) {
             var opt = document.createElement('option');
             opt.text = j;
-            opt.value = elements[i][j];
-            document.getElementById(i).add(opt);
+            opt.value = elements[i][j]; document.getElementById(i).add(opt);
         }
     }
 }
@@ -622,15 +621,20 @@ function getDevices(data) {
     var rowCount = table.rows.length;
    
     // Update by deleting everything and then adding again 
-    for (i=0;i<rowCount;i++) {
+    // start at 1 to leave the table header
+    for (i=1;i<rowCount;i++) {
        table.deleteRow(i);
     }
 
     for (var i in devlist) {
-           var row = table.insertRow(i);
+           var row = table.insertRow(1);
            row.insertCell(0).innerHTML= devlist[i].dev_id;
-//'<input type="button" value = "Delete" onClick="Javacsript:deleteRow(this)">';
-           row.insertCell(1).innerHTML= devlist[i].start;
+           row.insertCell(1).innerHTML= devlist[i].type;
+           row.insertCell(2).innerHTML= ((devlist[i].blv>>4)&0xF0)+'.'+(devlist[i].blv&0x0F);
+           row.insertCell(3).innerHTML= devlist[i].apm;
+           row.insertCell(4).innerHTML= ((devlist[i].apv>>4)&0xF0)+'.'+(devlist[i].apv&0x0F);
+           row.insertCell(5).innerHTML= devlist[i].start;
+           row.insertCell(6).innerHTML= "EDIT";
     }
 }
 

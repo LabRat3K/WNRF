@@ -206,7 +206,7 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
     switch (data[1]) {
         case 'A': out_driver.enableAdmin(); break;  // Turn off the Streaming Output
         case 'a': out_driver.disableAdmin(); break; // Turn on the Streaming Output
-// add..Device Query : read DevId, BL Version, App Version, Start Address
+// add..Device Query : read DevId, BL Version, App Magic, App Version, Start Address
 //      Device Update: Change DevID?
 //      Device Update: Change Start Address
 //      Device Update: Push Firmware
@@ -423,7 +423,13 @@ void procN(uint8_t *data, AsyncWebSocketClient *client) {
                 snprintf(name,7,"1D00%2.2x",i);
                 JsonObject device = devList.createNestedObject(name);
                    device["dev_id"] = name;
-                   device["start"] = i*42; /* Other Parameters? */
+                   device["type"] = "1823";
+                   device["blv"]=1; /* Boot Loader Version */
+                   device["apm"]=42; /* App Magic Number */
+                   snprintf(name,7,"1%1.1x",millis()&0x0F);
+                   device["apv"]=name; /* Boot Loader Version */
+                   snprintf(name,7,"%d",i*42);
+                   device["start"] = name; /* Other Parameters? */
             }
 
             String response;
