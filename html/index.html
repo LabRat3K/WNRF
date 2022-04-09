@@ -48,7 +48,7 @@
       <div class="row">
         <div class="col-sm-6">
           <fieldset>
-            <legend class="esps-legend">Network Status</legend>
+            <legend class="esps-legend">WLAN Status</legend>
             <table class="esps-table">
               <tr><td width="25%">SSID</td><td><span id="x_ssid"></span></td></tr>
               <tr><td width="25%">Hostname</td><td><span id="x_hostname"></span></td></tr>
@@ -280,16 +280,46 @@
             <label class="control-label col-sm-2" for="nrf_baud">NRF Baud</label>
                <div class="col-sm-3"><select class="form-control" id="nrf_baud" name="nrf_baud"></select></div>
           </div>
-        <!-- Device Config Save -->
+        <!-- nRF Config Save -->
           <div class="form-group">
             <div class="col-sm-offset-2 col-sm-10">
               <button type="button" onclick="submitConfig()" class="btn btn-primary">Save Changes</button>
             </div>
           </div>
         </form>
+        <!-- Client Firmware -->
+        <form class="form-horizontal" onsubmit="return false">
+          <div class="form-group">
+            <div class="col-sm-offset-2 col-sm-10">
+              <div class="checkbox"><label><input type="checkbox" id="dev_admin" name="dev_admin"> Device Admin </label></div>
+            </div>
+          </div>
+        </form>
       </fieldset>
-    </div>
 
+      <div id="devadmin" class="form-group devadmin hidden">
+        <fieldset>
+          <div class="col-sm-6">
+            <legend class="esps-legend">Client Firmware</legend>
+            <div class = "form-group">
+              <label class="control-label col-sm-2" for="nrf_fw">Hex File:</label>
+              <span id="nrf_fw"></span><BR>
+              <form method = "POST" action = "/wnrfu" enctype="multipart/form-data">
+                <input type="file" name="data"/><BR>
+                <div class="col-sm-offset-2 col-sm-10">
+                  <button type="button" onclick="submit()" class="btn btn-primary">UPLOAD</button>
+                </div>
+              </form>	
+            </div>
+          </div>
+          <div class="col-sm-6">
+          <fieldset>
+            <legend class="esps-legend">Client Devices</legend>
+            <table class="esps-table" id="nrf_list"></table>
+          </fieldset>
+        </fieldset>
+      </div>
+    </div>
     <!-- Effects configuration -->
     <div id="effects" class="mdiv hidden anchor">
       <fieldset>

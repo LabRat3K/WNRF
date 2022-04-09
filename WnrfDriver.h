@@ -38,6 +38,10 @@ enum class NrfChan : uint8_t {
     NRFCHAN_G        /* 82..83 */
 };
 
+typedef struct sDevId {
+   unsigned char id[3];
+} tDevId;
+
 class WnrfDriver {
  public:
     int begin(NrfBaud baud, NrfChan chanid,int size);
@@ -49,13 +53,17 @@ class WnrfDriver {
     /* NRF Device Management */
     void triggerPoll();
     void checkRx();
-    void sendNewDevId(uint16_t devId, uint16_t newId);
-    void sendNewChan (uint16_t devId, uint8_t  chanId);
-    void sendNewStart(uint16_t devId, uint16_t start);
+
+    void sendNewDevId(tDevId  devId, tDevId  newId);
+    void sendNewChan (tDevId  devId, uint8_t  chanId);
+    void sendNewStart(tDevId  devId, uint16_t start);
+    void printIt(void);
+    void enableAdmin(void);
+    void disableAdmin(void);
 
     /* Set channel value at address */
     inline void setValue(uint16_t address, uint8_t value) {
-        if (num_channels == 32) {
+        if (gnum_channels == 32) {
 	   if (address<32) _dmxdata[address] = value;
         } else {
            _dmxdata[1+((address/31)<<5)+(address%31)] = value;
@@ -63,24 +71,33 @@ class WnrfDriver {
     }
 
     inline bool canRefresh() {
-        if (num_channels == 32) {
-            return (millis() - startTime) >= 22;
+        if (gnum_channels == 32) {
+            return (millis() - gstart_time) >= 22;
         } else {
-            return (micros() - startTime) >= 665; //Practical vs Theoretical 1336;
+            return (micros() - gstart_time) >= 665; //Practical vs Theoretical 1336;
         }
     }
+
  private:
-    void        setBaud(NrfBaud baud);
-    uint32_t    startTime;      // When the last frame TX started
-    uint32_t    refreshTime;    // Time until we can refresh after starting a TX
-    uint8_t*    _dmxdata;       // Full Universe 
-    uint16_t	num_channels;   // Amount of DMX data to transmit
-    uint8_t	next_packet;    // Packet index for next frame
+    // Global Variables
+    uint32_t    gstart_time;    // When the last frame TX started
+    uint16_t	gnum_channels;  // Amount of DMX data to transmit
+    uint8_t	gnext_packet;   // Packet index for next frame
  
-    uint8_t     led_count;      // For LED based feedback
-    uint8_t     led_state;      // Blink approx 1 per second
-    void        sendGenericCmd(uint16_t devId, uint8_t cmd, uint16_t value);
+    uint8_t*    _dmxdata;       // Full Universe 
+
+    uint8_t     gled_count;      // For LED based feedback
+    uint8_t     gled_state;      // Blink approx 1 per second
+    bool        gadmin; 
+
+    // Global Config
+    NrfBaud  conf_baudrate;
+    NrfChan  conf_chanid;
+
+    // Functions
+    void        setBaud(NrfBaud baud);
+    void	setChan(NrfChan chanid);
+    void        sendGenericCmd(tDevId devId, uint8_t cmd, uint16_t value);
 };
 
 #endif /* WNRFDIVER_H_ */
-

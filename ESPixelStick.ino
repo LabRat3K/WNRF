@@ -187,6 +187,8 @@ void setup() {
     {
         LOG_PORT.print("Total bytes in file system: ");
         LOG_PORT.println(fs_info.usedBytes);
+        LOG_PORT.print("Space:");
+        LOG_PORT.println(fs_info.totalBytes - fs_info.usedBytes);
 
         Dir dir = SPIFFS.openDir("/");
         while (dir.next()) {
@@ -317,17 +319,23 @@ void initWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
-  connectWifi();
-  uint32_t timeout = millis();
-  while (WiFi.status() != WL_CONNECTED) {
-    LOG_PORT.print(".");
-    delay(500);
-    if (millis() - timeout > (1000 * config.sta_timeout) ) {
-      LOG_PORT.println("");
-      LOG_PORT.println(F("*** Failed to connect ***"));
-      break;
-    }
+  if (!config.ssid.isEmpty()) {
+     connectWifi();
+     uint32_t timeout = millis();
+     while (WiFi.status() != WL_CONNECTED) {
+       LOG_PORT.print(".");
+       delay(500);
+       if (millis() - timeout > (1000 * config.sta_timeout) ) {
+         LOG_PORT.println("");
+         LOG_PORT.println(F("*** Failed to connect ***"));
+         break;
+       }
+     }
   }
+}
+
+void reconnectWifi() {
+  WiFi.reconnect();
 }
 
 void connectWifi() {
@@ -394,7 +402,7 @@ void onWiFiDisconnect(const WiFiEventStationModeDisconnected &event) {
   // Pause MQTT reconnect while WiFi is reconnecting
   mqttTicker.detach();
 #endif
-  wifiTicker.once(2, connectWifi);
+  wifiTicker.once(2, reconnectWifi);
 }
 
 // Subscribe to "n" universes, starting at "universe"
@@ -627,6 +635,59 @@ void publishAttributes() {
 //
 /////////////////////////////////////////////////////////
 
+File file; // Watch the spelling
+char fw_name[40];
+int getFWName(void) {
+    Dir dir = SPIFFS.openDir("/16f/");
+    if (dir.next()) {
+      snprintf(fw_name,40,"%s",dir.fileName().c_str());
+      return 1;
+    } else {
+      sprintf(fw_name,"");
+      return 0;
+    }
+}
+
+void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+  if(!index){
+    LOG_PORT.print(F("UploadStart: "));
+    LOG_PORT.println(filename.c_str());
+
+    // Delete any existing files
+    Dir dir = SPIFFS.openDir("/16f/");
+    while (dir.next()) {
+      LOG_PORT.print("Removing (");
+      LOG_PORT.print(dir.fileName());
+      SPIFFS.remove(dir.fileName());
+      File f = dir.openFile("r");
+      LOG_PORT.println(")");
+    }
+    file = SPIFFS.open("/16f/"+filename,"w");
+  }
+
+  if (!file) {
+     // Something went wrong - invalid file handle
+     request->send(500, "text/plain", "File Creation Error: " );
+  }
+  if (len) {
+     file.write(data,len);
+  }
+  if(final){
+    file.close();
+    LOG_PORT.print(F("\nUploadEnded: "));
+    LOG_PORT.print(filename.c_str());
+    LOG_PORT.print(", ");
+    LOG_PORT.println(index+len);
+    request->send(200, "text/plain", "File Upload Completed: " );
+  }
+  // Update filename
+  getFWName();
+  LOG_PORT.print(F("FILENAME:"));
+  LOG_PORT.print(fw_name);
+  LOG_PORT.print(".\n");
+  // Need to restructure so that this can trigger a WS push
+}
+
 // Configure and start the web server
 void initWeb() {
   // Handle OTA update from asynchronous callbacks
@@ -655,6 +716,12 @@ void initWeb() {
   web.on("/updatefw", HTTP_POST, [](AsyncWebServerRequest * request) {
     ws.textAll("X6");
   }, handle_fw_upload).setFilter(ON_STA_FILTER);
+
+  // File Upload Handler
+  web.on("/wnrfu", HTTP_POST, [](AsyncWebServerRequest *request) {},
+      [](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data,
+                    size_t len, bool final) {handleUpload(request, filename, index, data, len, final);}
+  );
 
   // Static Handler
   web.serveStatic("/", SPIFFS, "/www/").setDefaultFile("index.html");
@@ -1168,6 +1235,8 @@ void serializeConfig(String &jsonString, bool pretty, bool creds) {
     wnrf["enabled"]  = config.nrf_legacy;
     wnrf["nrf_chan"] = static_cast<uint8_t>(config.nrf_chan);
     wnrf["nrf_baud"] = static_cast<uint8_t>(config.nrf_baud);
+    getFWName();
+    wnrf["nrf_fw"] =fw_name;
 #endif
 
     if (pretty)
@@ -1598,10 +1667,15 @@ void loop() {
 
         while (inch >=0 ) {
            switch (inch) {
-              case 'q':  out_driver.triggerPoll(); break; // QUERY DEVICE
+              case 'q':  out_driver.triggerPoll();  break; // QUERY DEVICE
+              case 'p':  out_driver.printIt();      break;
+              case 'a':  out_driver.disableAdmin(); break;
+              case 'A':  out_driver.enableAdmin();  break;
+/*
               case 'd':  out_driver.sendNewDevId(0x0001,0x0042); break; // Set DEVICE ID
               case 'c':  out_driver.sendNewChan(0x0001,101); break;
               case 's':  out_driver.sendNewStart(0x0001,142); break;
+*/
               default: break;
            }
            inch = LOG_PORT.read();

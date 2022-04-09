@@ -194,6 +194,22 @@ $(function() {
        }
     });
 
+    $('#dev_admin').click(function() {
+        if ($(this).is(':checked')) {
+            if (window.confirm("Device Admin will pause data streaming..")) {
+               $('.devadmin').removeClass('hidden');
+               wsEnqueue('DA'); // Enabled ADMIN mode
+            } else {
+               document.getElementById('dev_admin').checked = false;
+           //$(this).checked = false;
+            }
+       } else {
+            $('.devadmin').addClass('hidden');
+            wsEnqueue('Da'); // Disable ADMIN mode
+       }
+    });
+
+
     $('#p_gammaVal').change(function() {
             sendGamma();
     });
@@ -385,6 +401,7 @@ function wsConnect() {
             wsEnqueue('G2'); // Get Net Status
             wsEnqueue('G3'); // Get Effect Info
             wsEnqueue('G4'); // Get Gamma Table
+            wsEnqueue('N1'); // Get list of NRF devices
 
             feed();
         };
@@ -408,6 +425,9 @@ function wsConnect() {
                     break;
                 case 'G4':
                     refreshGamma(data);
+                    break;
+                case 'N1':
+                    getDevices(data);
                     break;
                 case 'S1':
                     setConfig(data);
@@ -596,6 +616,24 @@ function getElements(data) {
     }
 }
 
+function getDevices(data) {
+    var devlist = JSON.parse(data);
+    var table = document.getElementById("nrf_list");
+    var rowCount = table.rows.length;
+   
+    // Update by deleting everything and then adding again 
+    for (i=0;i<rowCount;i++) {
+       table.deleteRow(i);
+    }
+
+    for (var i in devlist) {
+           var row = table.insertRow(i);
+           row.insertCell(0).innerHTML= devlist[i].dev_id;
+//'<input type="button" value = "Delete" onClick="Javacsript:deleteRow(this)">';
+           row.insertCell(1).innerHTML= devlist[i].start;
+    }
+}
+
 function getConfig(data) {
     var config = JSON.parse(data);
 
@@ -688,6 +726,11 @@ function getConfig(data) {
         $('#nrf_legacy').prop('checked', config.wnrf.enabled);
         $('#nrf_chan').val(config.wnrf.nrf_chan);
         $('#nrf_baud').val(config.wnrf.nrf_baud);
+        if (config.wnrf.nrf_fw.length>0)
+           $('#nrf_fw').text(config.wnrf.nrf_fw);
+        else
+           $('#nrf_fw').text('none');
+
         if ($('#nrf_legacy').is(':checked')) {
             $('.nrf').addClass('hidden');
          } else {

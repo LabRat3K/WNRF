@@ -63,6 +63,9 @@ extern const char CONFIG_FILE[];
 
     V1 - View Stream
 
+    N1 - List of NRF clients
+    N2 - ?? NRF config/setup
+
     S1 - Set Network Config
     S2 - Set Device Config
     S3 - Set Effect Startup Config
@@ -194,6 +197,20 @@ void procE(uint8_t *data, AsyncWebSocketClient *client) {
             String response;
             serializeJson(json, response);
             client->text("E1" + response);
+            break;
+    }
+}
+
+// Device Admin handler
+void procD(uint8_t *data, AsyncWebSocketClient *client) {
+    switch (data[1]) {
+        case 'A': out_driver.enableAdmin(); break;  // Turn off the Streaming Output
+        case 'a': out_driver.disableAdmin(); break; // Turn on the Streaming Output
+// add..Device Query : read DevId, BL Version, App Version, Start Address
+//      Device Update: Change DevID?
+//      Device Update: Change Start Address
+//      Device Update: Push Firmware
+        default : // Do Nothing
             break;
     }
 }
@@ -393,6 +410,29 @@ void procT(uint8_t *data, AsyncWebSocketClient *client) {
 #endif
 }
 
+void procN(uint8_t *data, AsyncWebSocketClient *client) {
+    String response;
+    DynamicJsonDocument json(1024);
+
+    switch (data[1]) {
+       case '1': {  // List of any NRF devices
+            JsonObject devList = json.createNestedObject("deviceList");
+            //for(int i=0; i < effects.getEffectCount(); i++){
+            for(int i=0; i < 3; i++){
+               char name[8];
+                snprintf(name,7,"1D00%2.2x",i);
+                JsonObject device = devList.createNestedObject(name);
+                   device["dev_id"] = name;
+                   device["start"] = i*42; /* Other Parameters? */
+            }
+
+            String response;
+            serializeJson(devList, response);
+            client->text("N1" + response);
+       }
+    }
+}
+
 void procV(uint8_t *data, AsyncWebSocketClient *client) {
     switch (data[1]) {
         case '1': {  // View stream
@@ -505,6 +545,12 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                         break;
                     case 'G':
                         procG(data, client);
+                        break;
+                    case 'D':
+                        procD(data, client);
+                        break;
+                    case 'N':
+                        procN(data, client);
                         break;
                     case 'S':
                         procS(data, client);
