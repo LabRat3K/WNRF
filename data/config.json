@@ -1,7 +1,7 @@
 {
   "network": {
-    "ssid": "NRFDEV",
-    "passphrase": "BLINKYFLASHY$22",
+    "ssid": "",
+    "passphrase": "",
     "ip": [
       192,
       168,
