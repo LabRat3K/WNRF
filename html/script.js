@@ -3,7 +3,10 @@ var mode = 'null';
 var wsQueue = [];
 var wsBusy = false;
 var wsTimerId;
+var devices =[]; // Start with Empty Array
+var wnrfTimerId;
 
+const auditInterval = setInterval(auditDevices, 5000);
 // json with effect definitions
 var effectInfo;
 
@@ -211,6 +214,9 @@ $(function() {
             if (window.confirm("Device Admin will pause data streaming..")) {
                $('.devadmin').removeClass('hidden');
                wsEnqueue('DA'); // Enabled ADMIN mode
+               wsEnqueue('D1'); // Start polling clients (could combined with 'DA')
+
+               wnrfTimerId= setInterval(wsEnqueue,2000,"D1");
             } else {
                document.getElementById('dev_admin').checked = false;
            //$(this).checked = false;
@@ -218,6 +224,7 @@ $(function() {
        } else {
             $('.devadmin').addClass('hidden');
             wsEnqueue('Da'); // Disable ADMIN mode
+            clearInterval(wnrfTimerId);
        }
     });
 
@@ -413,7 +420,6 @@ function wsConnect() {
             wsEnqueue('G2'); // Get Net Status
             wsEnqueue('G3'); // Get Effect Info
             wsEnqueue('G4'); // Get Gamma Table
-            wsEnqueue('N1'); // Get list of NRF devices
 
             feed();
         };
@@ -438,8 +444,14 @@ function wsConnect() {
                 case 'G4':
                     refreshGamma(data);
                     break;
-                case 'N1':
+                case 'D1':
                     getDevices(data);
+                    break;
+                case 'D2':
+                    setNewChan(data);
+                    break;
+                case 'D3':
+		    rxBindReply(data); 
                     break;
                 case 'S1':
                     setConfig(data);
@@ -627,44 +639,109 @@ function getElements(data) {
     }
 }
 
-function getDevices(data) {
-    var devlist = JSON.parse(data);
+function showDevices() {
+    // Code to re-populated the HTML <TABLE>
     var table = document.getElementById("nrf_list");
     var rowCount = table.rows.length;
    
     // Update by deleting everything and then adding again 
     // start at 1 to leave the table header
-    for (i=1;i<rowCount;i++) {
-       table.deleteRow(i);
+    for (var i=1;i<rowCount;i++) {
+       table.deleteRow(1);
     }
 
-    var j = 1;
-    for (var i in devlist) {
-           var row = table.insertRow(j);
-           row.insertCell(0).innerHTML= devlist[i].dev_id;
-           row.insertCell(1).innerHTML= devlist[i].type;
-           row.insertCell(2).innerHTML= ((devlist[i].apv>>4)&0x0F)+'.'+(devlist[i].apv&0x0F);
-           row.insertCell(3).innerHTML= devlist[i].start;
-           row.insertCell(4).innerHTML= "<input type=\"radio\" id=\""+devlist[i].dev_id+"\" onClick=\"editDevice('"+i+"','"+devlist[i].type+"',"+devlist[i].blv+","+devlist[i].apm+","+devlist[i].apv+","+devlist[i].start+");\">";
-           j++;
+    for (var i=0;i<devices.length;i++) {
+           var row = table.insertRow(i+1); // Offset for header
+           row.insertCell(0).innerHTML= devices[i].dev_id;
+           row.insertCell(1).innerHTML= devices[i].type;
+           row.insertCell(2).innerHTML= ((devices[i].apv>>4)&0x0F)+'.'+(devices[i].apv&0x0F);
+           row.insertCell(3).innerHTML= devices[i].start;
+           row.insertCell(4).innerHTML= "<input type=\"radio\" id=\""+devices[i].dev_id+"\" onClick=\"editDevice(\'"+devices[i].dev_id+"\');\">";
     }
 }
 
-function editDevice(devid,dtype,blv, apm, apv,start) {
+function auditDevices() { // a 5 second periodic
+    // Walk the list.. decrement the audit counter anymore more than nn seconds - remove
+    for (var i=0;i<devices.length;i++) {
+       devices[i].audit--;
+       if (devices[i].audit==0) {
+          devices.splice(i,1);
+          i--;  // Needed as the array is now 1 row shorter
+       }
+    }
+    showDevices();
+}
+
+function getDevices(data) {
+    var devlist = JSON.parse(data);
+  
+    for (var i in devlist) {
+       // For each parsed device - see if it is already in the array
+       var index = devices.findIndex(item => item.dev_id === i);
+       if (index ==-1) {
+          // This is a new array entry - add to the list
+          devices.push({dev_id: i,
+                        type: devlist[i].type,
+                        blv:   devlist[i].blv,
+                        apm:   devlist[i].apm,
+                        apv:   devlist[i].apv,
+                        start: devlist[i].start,
+                        audit: 6});
+        } else {
+           devices[index].audit=6; // Renew it's lease
+        }
+    } 
+}
+
+function editDevice(devid) {
+    var json = {
+            'device': {
+                'devid': $('#ed_devid').text()
+                 }
+               }
+    $('#bind').modal();
+
+    wsEnqueue('D3' + JSON.stringify(json));
+}
+
+function rxBindReply(data) {
+    // Parse the JSON and CONFIRM bind success
+    var config = JSON.parse(data);
+
     var table = document.getElementById("nrf_list");
 
+    $('#bind').modal('hide');
+
+    if (config.device.bind == false ) {
+       console.log ("BIND error");
+//Update with an error message to the UI
+       return;
+    }
+
+    var devindex = devices.findIndex(item => item.dev_id === config.device.devid);
+
+     console.log("Searching for:"+config.device.devid+".\n");
+
+     if (devindex ==-1) { 
+        // Race Condition - bail
+
+// To Do.. error handling here
+        return;
+     }
+    
+     var device = devices[devindex];
 
      $('.devedit').removeClass('hidden');
-     $('#ed_devid').text(devid);
-     $('#ed_type').text(dtype);
-     $('#ed_blv').text(((blv>>4)&0x0F)+'.'+((blv&0x0F)));
-     $('#ed_apm').text(apm);
-     $('#ed_apv').text( ((apv>>4)&0x0F)+'.'+((apv&0x0F)));
+     $('#ed_devid').text(device.dev_id);
+     $('#ed_type').text(device.type);
+     $('#ed_blv').text(((device.blv>>4)&0x0F)+'.'+((device.blv&0x0F)));
+     $('#ed_apm').text(device.apm);
+     $('#ed_apv').text( ((device.apv>>4)&0x0F)+'.'+((device.apv&0x0F)));
 
-     $('#s_chanid').val(start);
+     $('#s_chanid').val(device.start); // The RANGE slider
+     $('#channel').val(device.start);  // The RANGE output
 
-     document.getElementById(devid).checked = false;
-
+     document.getElementById(device.dev_id).checked = false;
 }
 
 function editChan() {

@@ -337,23 +337,16 @@
           <div id="devedit" class="form-group devedit hidden">
              <form class="form-horizontal" onsubmit="return false">
              <legend class="esps-legend">Device Edit</legend>
+
                <div class="form-group">
                  <label class="control-label col-sm-3">Device ID</label>
-                 <div class="col-sm-9"><p class="form-control-static" id="ed_devid"><!--/p--></div>
-               </div>
-               <div class="form-group">
+                 <div class="col-sm-9"><p class="form-control-static" id="ed_devid"></p></div>
                  <label class="control-label col-sm-3">Type</label>
                  <div class="col-sm-9"><p class="form-control-static" id="ed_type"></p></div>
-               </div>
-               <div class="form-group">
                  <label class="control-label col-sm-3">Loader</label>
                  <div class="col-sm-9"><p class="form-control-static" id="ed_blv"></p></div>
-               </div>
-               <div class="form-group">
                  <label class="control-label col-sm-3">FW Magic No.</label>
                  <div class="col-sm-9"><p class="form-control-static" id="ed_apm"></p></div>
-               </div>
-               <div class="form-group">
                  <label class="control-label col-sm-3">FW Version</label>
                  <div class="col-sm-9"><p class="form-control-static" id="ed_apv">
                    <div class="form-group"><p><button type="button" onclick="submit()" class="btn btn-danger">OTA LOAD</button></p></div>
@@ -361,9 +354,11 @@
                </div>
                <div class="form-group">
                  <label class="control-label col-sm-3">Start Channel</label>
-                 <div class="col-sm-9"><p class="form-control-static">
-                       <input size="4" maxsize="4" type="text" class="form-control" id="s_chanid" title="E.131 channel." onchange="editChan()"></td></tr>
-                    </p></div>
+                 <div class="col-sm-9">
+                       <!--input size=4" maxlength="3" type="text" id="s_chanid" title="E.131 channel." onchange="editChan()"-->
+                   <input type="range" min="1" max="512" id="s_chanid" oninput="this.nextElementSibling.value = this.value" onchange="editChan()">
+                   <output id="channel"></output>
+                 </div>
                </div>
                <div class="form-group"><p><button type="button" onclick="doneEdit()" class="btn btn-primary">Done</button></p></div>
               </form>
@@ -563,6 +558,21 @@
         </div>
         <div class="modal-body">
           <p>Hex file upload in progress...</p>
+          <div class="bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Binding Modal -->
+  <div id="bind" class="modal fade" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title">Client Edit Binding</h4>
+        </div>
+        <div class="modal-body">
+          <p>Sending BIND request to client device...</p>
           <div class="bar"></div>
         </div>
       </div>

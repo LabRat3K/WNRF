@@ -63,8 +63,10 @@ extern const char CONFIG_FILE[];
 
     V1 - View Stream
 
-    N1 - List of NRF clients
-    N2 - ?? NRF config/setup
+    D1 - List of NRF client devices
+    D2 - Update Channel Request
+    D3 - BIND request
+    Da/A - enable.disable Device Admin
 
     S1 - Set Network Config
     S2 - Set Device Config
@@ -201,19 +203,62 @@ void procE(uint8_t *data, AsyncWebSocketClient *client) {
     }
 }
 
+void sendClientData(AsyncWebSocketClient *client) {
+   tDeviceInfo *list;
+   int count = out_driver.getDeviceList(&list);
+
+   LOG_PORT.print(F("sendClientData:"));
+   LOG_PORT.print(count);
+   LOG_PORT.println(F(" devices"));
+
+   if (count) {
+      DynamicJsonDocument json(1024);
+      JsonObject devList = json.createNestedObject("deviceList");
+      char tempid[8];
+      int i;
+
+      for (i=0;i<count;i++) {
+         tDeviceInfo *dev = &(list[i]);
+         char *bytes = (char *)&(dev->dev_id);
+         sprintf(tempid,"%2.2X%2.2X%2.2X",bytes[2],bytes[1],bytes[0]);
+         JsonObject device = devList.createNestedObject(tempid);
+            device["dev_id"] = tempid;
+            device["type"] = dev->type;
+            device["blv"]=dev->blv; /* Boot Loader Version */
+            device["apm"]=dev->apm; /* App Magic Number */
+            device["apv"]=dev->apv; /* Boot Loader Version */
+            device["start"] = dev->start; 
+       }
+       out_driver.clearDeviceList(); 
+       String message;
+       serializeJson(devList, message);
+       client->text("D1" + message);
+   }
+}
+
 // Device Admin handler
 void procD(uint8_t *data, AsyncWebSocketClient *client) {
     DynamicJsonDocument json(1024);
     DeserializationError error = deserializeJson(json, reinterpret_cast<char*>(data + 2));
     switch (data[1]) {
-        case 'A': out_driver.enableAdmin(); break;  // Turn off the Streaming Output
-        case 'a': out_driver.disableAdmin(); break; // Turn on the Streaming Output
-// add..Device Query : read DevId, BL Version, App Magic, App Version, Start Address
-//      Device Update: Change DevID?
-//      Device Update: Change Start Address
-//      Device Update: Push Firmware
+        case 'A': 
+           out_driver.enableAdmin(); 
+           break;  // Turn off the Streaming Output
+        case 'a': 
+           out_driver.disableAdmin(); 
+           break; // Turn on the Streaming Output
+        case '1':
+            LOG_PORT.println(F("(D1) Device Refresh Request**"));
+            sendClientData(client);
+            break;
         case '2':
-            LOG_PORT.println(F("D2 channel update request**"));
+            LOG_PORT.println(F("(D2) CHANNEL update request**"));
+            break;
+        case '3':
+            LOG_PORT.println(F("(D3) DevId  update request**"));
+            break;
+        case '4':
+            LOG_PORT.println(F("(D4) Send Updated Firmware request**"));
             break;
         default : // Do Nothing
             break;
@@ -415,35 +460,6 @@ void procT(uint8_t *data, AsyncWebSocketClient *client) {
 #endif
 }
 
-void procN(uint8_t *data, AsyncWebSocketClient *client) {
-    String response;
-    DynamicJsonDocument json(2048);
-
-    switch (data[1]) {
-       case '1': {  // List of any NRF devices
-            JsonObject devList = json.createNestedObject("deviceList");
-            //for(int i=0; i < effects.getEffectCount(); i++){
-            for(int i=0; i < 13; i++){
-               char name[8];
-                snprintf(name,7,"1D00%2.2x",i);
-                JsonObject device = devList.createNestedObject(name);
-                   device["dev_id"] = name;
-                   device["type"] = "1823";
-                   device["blv"]=1; /* Boot Loader Version */
-                   device["apm"]=42; /* App Magic Number */
-                   snprintf(name,7,"%d",0x10 |millis()&0x0F);
-                   device["apv"]=name; /* Boot Loader Version */
-                   snprintf(name,7,"%d",i*32);
-                   device["start"] = name; /* Other Parameters? */
-            }
-
-            String response;
-            serializeJson(devList, response);
-            client->text("N1" + response);
-       }
-    }
-}
-
 void procV(uint8_t *data, AsyncWebSocketClient *client) {
     switch (data[1]) {
         case '1': {  // View stream
@@ -461,7 +477,7 @@ void procV(uint8_t *data, AsyncWebSocketClient *client) {
            }
 #if defined(ESPS_MODE_WNRF)
 	case '2': { // View Frequency Histogram
-            client->binary(out_driver.getHistogram(),84);
+            client->binary(out_driver.getNrfHistogram(),84);
            }
 #endif
     }
@@ -559,9 +575,6 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                         break;
                     case 'D':
                         procD(data, client);
-                        break;
-                    case 'N':
-                        procN(data, client);
                         break;
                     case 'S':
                         procS(data, client);

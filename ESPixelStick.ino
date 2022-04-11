@@ -1667,7 +1667,7 @@ void loop() {
 
         while (inch >=0 ) {
            switch (inch) {
-              case 'q':  out_driver.triggerPoll();  break; // QUERY DEVICE
+              case 'q':  out_driver.sendBeacon();  break; // QUERY DEVICE
               case 'p':  out_driver.printIt();      break;
               case 'a':  out_driver.disableAdmin(); break;
               case 'A':  out_driver.enableAdmin();  break;

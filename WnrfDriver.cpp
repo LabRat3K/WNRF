@@ -86,12 +86,12 @@ int WnrfDriver::begin() {
 
 
 // E1.31 addresses (Legacy and New)
-byte addr_legacy[] = {0x81, 0xF0, 0xF0, 0xF0, 0xF0};//LEgacy for now
-byte addr_e131_bcast[] = {0xde,0xfa,0xda};
+byte addr_legacy[] = {0x81, 0xF0, 0xF0, 0xF0, 0xF0};
+byte addr_wnrf_bcast[] = {0xde,0xfa,0xda};
 
 // Address of the WNRF server
-byte addr_wnrf[]  = {0xC1,0xDE,0xC0}; // Was LEDCTL (1EDC71)
-byte addr_ctrl_id[]={0x00,0x00,0x1D};
+byte addr_wnrf_ctrl[]  = {0xC1,0xDE,0xC0}; // Was LEDCTL (1EDC71)
+byte addr_device[]={0x00,0x00,0x1D};
 
 int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     byte NrfRxAddress[] = {0xFF,0x3A,0x66,0x65,0x76};
@@ -101,6 +101,8 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     gnext_packet = 0;
     gadmin = false; //Never default to ADMIN mode
 
+    gdevice_count = 0;
+
     /* Allocate the Buffer Space */
     if (_dmxdata) free(_dmxdata);
     if (chan_size >32) {
@@ -109,6 +111,10 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     } else {
        gstart_time = millis();
     }
+
+    // Init all state timers
+    gbeacon_timeout=gbeacon_bind_timeout=gbeacon_client_response_timeout= millis();
+
 
     if (_dmxdata = static_cast<uint8_t *>(malloc(alloc_size))) {
         memset(_dmxdata, 0, alloc_size);
@@ -144,8 +150,8 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
        radio.openWritingPipe(addr_legacy);
     } else {
        radio.setAddressWidth(3);
-       radio.openWritingPipe(addr_e131_bcast);
-       radio.openReadingPipe(1,addr_wnrf);
+       radio.openWritingPipe(addr_wnrf_bcast);
+       radio.openReadingPipe(1,addr_wnrf_ctrl);
     }
    
     radio.startListening();
@@ -161,6 +167,7 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
 void WnrfDriver::enableAdmin(void) {
     gadmin = true;
     Serial.println("Enable ADMIN");
+    sendBeacon();
 }
 
 void WnrfDriver::disableAdmin(void) {
@@ -210,7 +217,7 @@ uint8_t* WnrfDriver::getData() {
 
 #define num_nrfchannels 84
 uint8_t values[num_nrfchannels];
-uint8_t* WnrfDriver::getHistogram() {
+uint8_t* WnrfDriver::getNrfHistogram() {
    int chanId, loopcount;
    memset(values, 0, sizeof(values));
    radio.stopListening();
@@ -237,25 +244,83 @@ uint8_t* WnrfDriver::getHistogram() {
    return values;
 }
 
-void WnrfDriver::triggerPoll() {
+int WnrfDriver::getDeviceList(tDeviceInfo **devices) {
+  bool send_data = false;
+
+   *devices =NULL;
+
+   if (gadmin == true) {
+      // Throttle to every 5 seconds
+      if (millis()-gbeacon_client_response_timeout > 5000) {
+         send_data = true;
+      } else {
+         if (gdevice_count==10) {
+            send_data = true;
+         }
+      }
+
+      if (send_data) {
+         *devices = gdevice_list;
+         return gdevice_count;
+      }
+   } else {
+      // Throw away any pending data
+      gdevice_count = 0;
+   }
+   return 0; // No data in the list
+}
+
+void WnrfDriver::clearDeviceList() {
+   gdevice_count = 0;
+};
+
+void WnrfDriver::parseNrf_x88(uint8_t *data) {
+   if (gdevice_count<10) { // Prevent Buffer Overrun
+      char tempid[8];
+      tDeviceInfo *temp = &(gdevice_list[gdevice_count++]);
+
+      memcpy(&(temp->dev_id),&data[1],3); // Device Id
+      temp->type  = data[4];           // Device Type
+      temp->blv   = data[5];           // Boot Loader Version */
+      temp->apm   = data[6];           // App Magic Number */
+      temp->apv   = data[7];           // Boot Loader Version */
+      temp->start = data[8]|(data[9]<<8); 
+
+      Serial.print("** Client Device detected [");
+      for (int i=0;i<16;i++) {
+         char hex[3];
+         sprintf(hex,"%2.2x",data[i]);
+         Serial.print(hex);
+      }
+      Serial.println("]");
+   }
+}
+
+void WnrfDriver::sendBeacon() {
    byte tempPacket[32];
-   
-   Serial.println("Sending QRY_DEVID");
-   radio.stopListening();
-   radio.openWritingPipe(addr_wnrf);
-   tempPacket[0]=0x85;
-   radio.write(tempPacket,32,1); // BROADCAST packet
 
-   radio.openWritingPipe(addr_e131_bcast);
-   radio.startListening();
-
+   // ONLY send beacon if in ADMIN mode
+   if (gadmin == true) {  
+      // Throttle to every 2 seconds
+      if (millis()-gbeacon_timeout > 2000) {
+         Serial.println("Sending QRY_DEVID");
+         radio.stopListening();
+         radio.openWritingPipe(addr_wnrf_ctrl);
+         tempPacket[0]=0x85;
+         radio.write(tempPacket,32,1); // BROADCAST packet
+      
+         gbeacon_timeout = millis();
+         radio.openWritingPipe(addr_wnrf_bcast);
+         radio.startListening();
+      }
+   }
 }
 
 void WnrfDriver::sendGenericCmd(tDevId devId, uint8_t cmd, uint16_t value) {
    byte tempPacket[32];
 
    // Address to the specific device
-   memcpy(addr_ctrl_id, devId.id, 3);
+   memcpy(addr_device, devId.id, 3);
 
    Serial.print("Sending CMD: ");
    Serial.print(cmd);
@@ -265,19 +330,19 @@ void WnrfDriver::sendGenericCmd(tDevId devId, uint8_t cmd, uint16_t value) {
    Serial.println(devId.id[0],HEX);
 
    radio.stopListening();
-   radio.openWritingPipe(addr_ctrl_id);
+   radio.openWritingPipe(addr_device);
    tempPacket[0] = cmd;
    tempPacket[1] = value>>8;
    tempPacket[2] = value&0xFF;
    radio.write(tempPacket,32); // P2P uses AA on the receiver
-   radio.openWritingPipe(addr_e131_bcast);
+   radio.openWritingPipe(addr_wnrf_bcast);
    radio.startListening();
 }
 
 void WnrfDriver::sendNewDevId(tDevId devId, tDevId newId) {
    byte tempPacket[32] = {0x00,0x00,0x00,0x00,'L','A','B','R','A','T'};
 
-   memcpy(addr_ctrl_id, devId.id, 3);
+   memcpy(addr_device, devId.id, 3);
    Serial.print("MTC CMD: PROG DEVICE: ");
    Serial.print(devId.id[2],HEX);
    Serial.print(devId.id[1],HEX);
@@ -288,7 +353,7 @@ void WnrfDriver::sendNewDevId(tDevId devId, tDevId newId) {
    Serial.println(newId.id[0],HEX);
 
    radio.stopListening();
-   radio.openWritingPipe(addr_ctrl_id);
+   radio.openWritingPipe(addr_device);
    // Update the payload packet
       // Protocol: 48-bit "string" to avoid accidental false positives.
       // byte 0 = 0x03 Write DeviceId command
@@ -311,7 +376,7 @@ void WnrfDriver::sendNewDevId(tDevId devId, tDevId newId) {
 */
 
    radio.write(tempPacket,32); // P2P uses AA on the receiver
-   radio.openWritingPipe(addr_e131_bcast);
+   radio.openWritingPipe(addr_wnrf_bcast);
    radio.startListening();
 }
 
@@ -333,16 +398,29 @@ void WnrfDriver::checkRx() {
 
         // Was it on the COMMAND interface?
         // Look at pipe?
-
-        // Deal with it
-        Serial.print("Rx CTL packet: (");
-        Serial.print(pipe);
-        Serial.print(") ");
-        for (int i=0;i<8;i++) {
-          char hex[3];
-          sprintf(hex,"%2.2x",payload[i]);
-          Serial.print(hex);
-        }
-        Serial.println(".");
+        switch (payload[0]) {
+           case 0x88: // Beacon response from client devices
+              parseNrf_x88(payload);
+              break;
+           case 0x85:
+              Serial.println("** WNRF Beacon detected!!");
+              Serial.println("** A second WNRF is in the area!!");
+              break;
+           default:
+            // Deal with it
+            Serial.print("Rx CTL packet: (");
+            Serial.print(pipe);
+            Serial.print(") ");
+            for (int i=0;i<8;i++) {
+              char hex[3];
+              sprintf(hex,"%2.2x",payload[i]);
+              Serial.print(hex);
+            }
+            Serial.println(".");
+            break;
+       }
     }
+
+    //  If in ADMIN mode - Timeouts
+    sendBeacon();
 }

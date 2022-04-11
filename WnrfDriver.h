@@ -42,16 +42,27 @@ typedef struct sDevId {
    unsigned char id[3];
 } tDevId;
 
+
+typedef struct sDeviceInfo {
+  tDevId   dev_id; //device_id
+  uint8_t  type;   //device_type;
+  uint8_t  blv;    //bootloader_version;
+  // Application specific 
+  uint8_t  apm;    //Application magic_number; 
+  uint8_t  apv;    //Application version;
+  uint16_t start;  //E1.31 channel_start;
+} tDeviceInfo;
+
 class WnrfDriver {
  public:
     int begin(NrfBaud baud, NrfChan chanid,int size);
     int begin();
     void show();
     uint8_t* getData();
-    uint8_t* getHistogram();
+    uint8_t* getNrfHistogram();
 
     /* NRF Device Management */
-    void triggerPoll();
+    void sendBeacon();
     void checkRx();
 
     void sendNewDevId(tDevId  devId, tDevId  newId);
@@ -60,6 +71,8 @@ class WnrfDriver {
     void printIt(void);
     void enableAdmin(void);
     void disableAdmin(void);
+    int  getDeviceList(tDeviceInfo **devices);
+    void clearDeviceList();
 
     /* Set channel value at address */
     inline void setValue(uint16_t address, uint8_t value) {
@@ -83,6 +96,11 @@ class WnrfDriver {
     uint32_t    gstart_time;    // When the last frame TX started
     uint16_t	gnum_channels;  // Amount of DMX data to transmit
     uint8_t	gnext_packet;   // Packet index for next frame
+
+    // Some ADMIN timeout values
+    uint32_t	gbeacon_timeout;
+    uint32_t	gbeacon_bind_timeout;
+    uint32_t	gbeacon_client_response_timeout;
  
     uint8_t*    _dmxdata;       // Full Universe 
 
@@ -90,14 +108,18 @@ class WnrfDriver {
     uint8_t     gled_state;      // Blink approx 1 per second
     bool        gadmin; 
 
+    tDeviceInfo gdevice_list[10]; 
+    uint8_t     gdevice_count;
+
     // Global Config
     NrfBaud  conf_baudrate;
     NrfChan  conf_chanid;
 
     // Functions
-    void        setBaud(NrfBaud baud);
-    void	setChan(NrfChan chanid);
-    void        sendGenericCmd(tDevId devId, uint8_t cmd, uint16_t value);
+    void setBaud(NrfBaud baud);
+    void setChan(NrfChan chanid);
+    void sendGenericCmd(tDevId devId, uint8_t cmd, uint16_t value);
+    void parseNrf_x88(uint8_t *data);
 };
 
 #endif /* WNRFDIVER_H_ */
