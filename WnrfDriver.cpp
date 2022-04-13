@@ -253,7 +253,7 @@ void WnrfDriver::show() {
         }
         if (gled_count == 0) {
             gled_state ^=1;
-            digitalWrite(1, gled_state);
+            digitalWrite(15, gled_state); // Blink when transmitting
             if (gnum_channels ==32)
                 gled_count =44;   // Legacy mode 44 single fps target
             else
