@@ -112,7 +112,7 @@ WnrfDriver      out_driver;
 #endif
 
 #define LED_WIFI 2
-#define LED_NRF  1 /* AKA D10 */
+#define LED_NRF  15 
 
 /////////////////////////////////////////////////////////
 //
