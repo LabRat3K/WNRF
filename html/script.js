@@ -14,6 +14,8 @@ var effectInfo;
 $.fn.modal.Constructor.DEFAULTS.backdrop = 'static';
 $.fn.modal.Constructor.DEFAULTS.keyboard = false;
 
+var admin_ctl=false;
+
 // Histogram 
 histData=[];
 histPhase = 0;
@@ -50,15 +52,18 @@ $(function() {
 
         // Firmware selection and upload
         $('#efu').change(function () {
-            $('#updatefw').submit();
             $('#update').modal();
+            $('#updatefw').submit();
         });
 
         // Hex file selection and upload
         $('#hex').change(function () {
-            $('#wnrfu').submit();
             $('#hexup').modal();
-        });
+            $('#wnrfu').submit();
+            // Wait for server response (or timeout) to clear the modal
+ // Add a timeout handler here.. *OR* can we probe the hidden frame to 
+ // see it's status?
+          });
 
         // Color Picker
         $('.color').colorPicker({
@@ -214,15 +219,12 @@ $(function() {
             if (window.confirm("Device Admin will pause data streaming..")) {
                $('.devadmin').removeClass('hidden');
                wsEnqueue('DA'); // Enabled ADMIN mode
-               wsEnqueue('D1'); // Start polling clients (could combined with 'DA')
-
-               wnrfTimerId= setInterval(wsEnqueue,2000,"D1");
             } else {
                document.getElementById('dev_admin').checked = false;
-           //$(this).checked = false;
             }
        } else {
             $('.devadmin').addClass('hidden');
+            $('.devedit').addClass('hidden'); // includes bledit and apedit
             wsEnqueue('Da'); // Disable ADMIN mode
             clearInterval(wnrfTimerId);
        }
@@ -444,6 +446,12 @@ function wsConnect() {
                 case 'G4':
                     refreshGamma(data);
                     break;
+                case 'DA':
+                    rxAdminReplyDA(data);
+                    break;
+                case 'Da':
+                    rxAdminReplyDa(data);
+                    break;
                 case 'D1':
                     getDevices(data);
                     break;
@@ -451,7 +459,7 @@ function wsConnect() {
                     setNewChan(data);
                     break;
                 case 'D3':
-		    rxBindReply(data); 
+                    rxWnrfuReply(data);
                     break;
                 case 'S1':
                     setConfig(data);
@@ -461,7 +469,7 @@ function wsConnect() {
                     setConfig(data);
                     break;
                 case 'S3':
-                    snackSave();
+                    footermsg('Configuration Saved');
                     break;
                 case 'S4':
                     break;
@@ -654,9 +662,16 @@ function showDevices() {
            var row = table.insertRow(i+1); // Offset for header
            row.insertCell(0).innerHTML= devices[i].dev_id;
            row.insertCell(1).innerHTML= devices[i].type;
-           row.insertCell(2).innerHTML= ((devices[i].apv>>4)&0x0F)+'.'+(devices[i].apv&0x0F);
-           row.insertCell(3).innerHTML= devices[i].start;
-           row.insertCell(4).innerHTML= "<input type=\"radio\" id=\""+devices[i].dev_id+"\" onClick=\"editDevice(\'"+devices[i].dev_id+"\');\">";
+           if (devices[i].apv == 0xFF) {
+             row.insertCell(2).innerHTML= "N/A"
+             row.insertCell(3).innerHTML= "---";
+           } else {
+             row.insertCell(2).innerHTML= ((devices[i].apv>>4)&0x0F)+'.'+(devices[i].apv&0x0F);
+             row.insertCell(3).innerHTML= devices[i].start;
+           }
+           if (admin_ctl) {
+              row.insertCell(4).innerHTML= "<input type=\"radio\" id=\""+devices[i].dev_id+"\" onClick=\"editDevice(\'"+devices[i].dev_id+"\');\">";
+           }
     }
 }
 
@@ -681,7 +696,7 @@ function getDevices(data) {
        if (index ==-1) {
           // This is a new array entry - add to the list
           devices.push({dev_id: i,
-                        type: devlist[i].type,
+                        type:  devlist[i].type,
                         blv:   devlist[i].blv,
                         apm:   devlist[i].apm,
                         apv:   devlist[i].apv,
@@ -693,45 +708,70 @@ function getDevices(data) {
     } 
 }
 
-function editDevice(devid) {
-    var json = {
-            'device': {
-                'devid': $('#ed_devid').text()
-                 }
-               }
-    $('#bind').modal();
+function rxAdminReplyDA(data) {
+    var admin = JSON.parse(data);
 
-    wsEnqueue('D3' + JSON.stringify(json));
+    if (admin.result == false) {
+       admin_ctl=false;
+       footermsg("WNRF: Error processing request (likely second user)");
+    } else {
+       admin_ctl = true;
+    }
 }
 
-function rxBindReply(data) {
-    // Parse the JSON and CONFIRM bind success
-    var config = JSON.parse(data);
+function rxAdminReplyDa(data) {
+    var admin = JSON.parse(data);
 
-    var table = document.getElementById("nrf_list");
-
-    $('#bind').modal('hide');
-
-    if (config.device.bind == false ) {
-       console.log ("BIND error");
-//Update with an error message to the UI
-       return;
+    if (admin.result == false) {
+       footermsg("WNRF: Error processing request (likely second user)");
     }
 
-    var devindex = devices.findIndex(item => item.dev_id === config.device.devid);
+    admin_ctl=false;
+}
 
-     console.log("Searching for:"+config.device.devid+".\n");
+function rxWnrfuReply(data) {
+    var wnrfu = JSON.parse(data);
 
-     if (devindex ==-1) { 
-        // Race Condition - bail
+    if (wnrfu.retcode == 200) {
+       $('#nrf_fw').text(wnrfu.nrf_fw);
+       $('#hexup').modal('hide');
+       $('#ota').prop('disabled',false);
+    } else {
+       footermsg("WNRF: Error on file upload ["+wnrfu.retcode+"]");
+       $('#ota').prop('disabled',true);
+    }
+}
 
-// To Do.. error handling here
+function editDevice(devid) {
+     console.log("Searching for:"+devid+".\n");
+   
+     // Click on Radio to close edit 
+     if ($('#ed_devid').text() == devid) {
+        doneEdit();
         return;
      }
-    
+
+    // Update by deleting everything and then adding again 
+    // start at 1 to leave the table header
+    var devindex =-1;
+    for (var i=0;i<devices.length;i++) {
+       if (devices[i].dev_id == devid)  {
+          devindex=i;
+          break;
+       }
+    }
+   
+   if (devindex==-1) {
+      footermsg('Device no longer in range');
+      return;
+   }
+
+   //Pulling from Table vs asking server to confirm with device
+   // Search table for row that matches
+
      var device = devices[devindex];
 
-     $('.devedit').removeClass('hidden');
+
      $('#ed_devid').text(device.dev_id);
      $('#ed_type').text(device.type);
      $('#ed_blv').text(((device.blv>>4)&0x0F)+'.'+((device.blv&0x0F)));
@@ -740,6 +780,23 @@ function rxBindReply(data) {
 
      $('#s_chanid').val(device.start); // The RANGE slider
      $('#channel').val(device.start);  // The RANGE output
+
+     // Enable AP editing if AP version is not 0xFF
+     if (device.apv != 0xFF) {
+        $('.apedit').removeClass('hidden');
+     } else {
+        $('.apedit').addClass('hidden');
+     }
+
+     // Enabled the OTA update if ADMIN and HEX file is present
+     if (admin_ctl) {
+        console.log("OTA status:"+$('#nrf_f').text());
+        console.log(($('#nrf_fw').text() === 'none'));
+        $('#ota').prop('disabled',($('#nrf_fw').text() === 'none'));
+     }
+
+     // Display the Edit Panes
+     $('.devedit').removeClass('hidden');
 
      document.getElementById(device.dev_id).checked = false;
 }
@@ -755,6 +812,8 @@ function editChan() {
 }
 
 function doneEdit() {
+    // Update the table ?
+     ($('#ed_devid').text(""));
      $('.devedit').addClass('hidden');
 }
 
@@ -972,9 +1031,30 @@ function refreshGamma(data) {
     polyline.setAttribute('points', points);
 }
 
-function snackSave() {
+function footermsg(message) {
+    // Show footer msg 
+    var x = document.getElementById('footer');
+    var bg = x.style.background;
+    var fg = x.style.color;
+    var msg = $('#name').text();
+
+
+    x.style.background='rgb(255,48,48)';
+    x.style.color="white";
+    $('#name').text(message);
+    
+    setTimeout(function(){
+        $('#name').text(msg);
+        //x.style.background='rgb(14,14,14)';
+        x.style.background=bg;
+        x.style.color=fg ;
+    }, 3000);
+}
+
+function snackmsg(message) {
     // Show snackbar for 3sec
     var x = document.getElementById('snackbar');
+    x.innerHTML=message;
     x.className = 'show';
     setTimeout(function(){
         x.className = x.className.replace('show', '');
@@ -984,7 +1064,7 @@ function snackSave() {
 function setConfig() {
     // Get config to refresh UI and show result
     wsEnqueue("G1");
-    snackSave();
+    snackmsg('Configuration Saved');
 }
 
 function submitWiFi() {

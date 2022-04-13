@@ -42,6 +42,12 @@ extern bool         reboot;     // Reboot flag
 
 extern const char CONFIG_FILE[];
 
+#if defined(ESPS_MODE_WNRF)
+#define MAX_WS 5
+AsyncWebSocketClient * connections[MAX_WS]={NULL,NULL,NULL,NULL,NULL};
+AsyncWebSocketClient * ws_edit_client;
+#endif
+
 /*
   Packet Commands
     E1 - Get Elements
@@ -63,9 +69,10 @@ extern const char CONFIG_FILE[];
 
     V1 - View Stream
 
+    NRF Device Editing/Auditing
     D1 - List of NRF client devices
     D2 - Update Channel Request
-    D3 - BIND request
+    D3 - WS File Upload Return Code
     Da/A - enable.disable Device Admin
 
     S1 - Set Network Config
@@ -203,37 +210,91 @@ void procE(uint8_t *data, AsyncWebSocketClient *client) {
     }
 }
 
-void sendClientData(AsyncWebSocketClient *client) {
-   tDeviceInfo *list;
-   int count = out_driver.getDeviceList(&list);
+#ifdef ESPS_MODE_WNRF
 
-   LOG_PORT.print(F("sendClientData:"));
-   LOG_PORT.print(count);
-   LOG_PORT.println(F(" devices"));
+// Helper Function to broadcast to all open
+// ws connections
+void broadcast(String message) {
+   for (int i=0;i<MAX_WS;i++){
+      if (connections[i]) {
+         connections[i]->text(message);
+      }
+   }// for each connection
+}
 
+
+//
+// 'D1' = Device List Push to client
+//
+void cb_devlist(tDeviceInfo * dev_list, uint8_t count) {
+   // Count is the number of rows in the dev_list table
+   // Dont' want to generate the JSON more than once.. so should we be
+   // maintaining the context list here vs in the WnrfDriver??
    if (count) {
       DynamicJsonDocument json(1024);
       JsonObject devList = json.createNestedObject("deviceList");
       char tempid[8];
-      int i;
 
-      for (i=0;i<count;i++) {
-         tDeviceInfo *dev = &(list[i]);
+      while (count--) {
+         tDeviceInfo *dev = &(dev_list[count]);
+
+         // Convert 3-byte address into a HEX string
          char *bytes = (char *)&(dev->dev_id);
          sprintf(tempid,"%2.2X%2.2X%2.2X",bytes[2],bytes[1],bytes[0]);
          JsonObject device = devList.createNestedObject(tempid);
-            device["dev_id"] = tempid;
-            device["type"] = dev->type;
-            device["blv"]=dev->blv; /* Boot Loader Version */
-            device["apm"]=dev->apm; /* App Magic Number */
-            device["apv"]=dev->apv; /* Boot Loader Version */
-            device["start"] = dev->start; 
-       }
-       out_driver.clearDeviceList(); 
-       String message;
-       serializeJson(devList, message);
-       client->text("D1" + message);
+            device["dev_id"]= tempid;    // Device Id
+            device["type"]  = dev->type; // Device Type
+            device["blv"]   = dev->blv;  // Boot Loader Version
+            device["apm"]   = dev->apm;  // App Magic Number
+            device["apv"]   = dev->apv;  // Boot Loader Version
+            device["start"] = dev->start;// E1.31 start Address
+      } // While
+
+      // Prepare JSON for transmission
+      String message;
+      serializeJson(devList, message);
+
+      // Broadcast this to all web clients devices
+      broadcast("D1"+message);
+   } // if result>0
+}
+
+
+void sendDeviceStatus(AsyncWebSocketClient *client) {
+   DynamicJsonDocument json(1024);
+   JsonObject status = json.createNestedObject("status");
+       status["admin"] = (ws_edit_client!=NULL);
+
+   String message;
+   serializeJson(status, message);
+
+   broadcast("DS"+message);
+}
+
+void sendEditResponse(char cmd, bool result, AsyncWebSocketClient *client ) {
+   DynamicJsonDocument json(1024);
+   JsonObject admin = json.createNestedObject("admin");
+       admin["result"] = result;
+
+   String message;
+   serializeJson(admin, message);
+   if (cmd=='a')  {
+      client->text("Da"+message);
+   } else {
+      client->text("DA"+message);
    }
+}
+
+void cb_upload_reply (uint16_t retcode, char * fname) {
+   DynamicJsonDocument json(1024);
+   JsonObject wnrfu = json.createNestedObject("wnrfu");
+       wnrfu["retcode"] = retcode;
+       wnrfu["nrf_fw"] = fname;
+
+   String message;
+   serializeJson(wnrfu, message);
+
+   broadcast("D3"+message);
 }
 
 // Device Admin handler
@@ -241,29 +302,39 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
     DynamicJsonDocument json(1024);
     DeserializationError error = deserializeJson(json, reinterpret_cast<char*>(data + 2));
     switch (data[1]) {
-        case 'A': 
-           out_driver.enableAdmin(); 
+        case 'A':
+           // Highlander: There can be only ONE ADMIN control UI
+           if (ws_edit_client==NULL) {
+              out_driver.enableAdmin();
+              ws_edit_client = client;
+           }
+           sendEditResponse(data[1],(ws_edit_client==client),client);
            break;  // Turn off the Streaming Output
-        case 'a': 
-           out_driver.disableAdmin(); 
+        case 'a':
+           // Only the ADMIN control UI can CANCEL it's own session
+           if (ws_edit_client==client) {
+              // This is permitted
+              out_driver.disableAdmin();
+              ws_edit_client = NULL;
+              sendEditResponse(data[1],true,client);
+           } else {
+              sendEditResponse(data[1],false,client);
+           }
            break; // Turn on the Streaming Output
         case '1':
             LOG_PORT.println(F("(D1) Device Refresh Request**"));
-            sendClientData(client);
             break;
         case '2':
             LOG_PORT.println(F("(D2) CHANNEL update request**"));
             break;
-        case '3':
-            LOG_PORT.println(F("(D3) DevId  update request**"));
-            break;
         case '4':
-            LOG_PORT.println(F("(D4) Send Updated Firmware request**"));
+            LOG_PORT.println(F("(D4) Send Updated OTA Firmware request**"));
             break;
         default : // Do Nothing
             break;
     }
 }
+#endif
 
 void procG(uint8_t *data, AsyncWebSocketClient *client) {
     switch (data[1]) {
@@ -557,6 +628,7 @@ void handle_config_upload(AsyncWebServerRequest *request, String filename,
     }
 }
 
+
 void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
         AwsEventType type, void * arg, uint8_t *data, size_t len) {
     switch (type) {
@@ -573,9 +645,11 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                     case 'G':
                         procG(data, client);
                         break;
+#ifdef ESPS_MODE_WNRF
                     case 'D':
                         procD(data, client);
                         break;
+#endif
                     case 'S':
                         procS(data, client);
                         break;
@@ -591,13 +665,48 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
             }
             break;
         }
-        case WS_EVT_CONNECT:
-            LOG_PORT.print(F("* WS Connect - "));
-            LOG_PORT.println(client->id());
+        case WS_EVT_CONNECT: {
+            int i;
+              LOG_PORT.print(F("* WS Connect - "));
+              LOG_PORT.println(client->id());
+#if defined(ESPS_MODE_WNRF)
+              for (i=0;i<MAX_WS;i++) {
+                 if (connections[i] == NULL) {
+                    connections[i] = client;
+                    break;
+                 }
+              }
+              if (i==MAX_WS)  {
+                LOG_PORT.println("Maximum number of concurrent clients exceeded");
+              } else {
+                LOG_PORT.print("Using connection: ");
+                LOG_PORT.println(i);
+              }
+#endif
+            }
             break;
-        case WS_EVT_DISCONNECT:
-            LOG_PORT.print(F("* WS Disconnect - "));
-            LOG_PORT.println(client->id());
+        case WS_EVT_DISCONNECT:{
+            int i;
+              LOG_PORT.print(F("* WS Disconnect - "));
+              LOG_PORT.println(client->id());
+#if defined(ESPS_MODE_WNRF)
+ // LabRat - clearContext to be removed
+              out_driver.clearContext((void *) client);
+
+              for (i=0;i<MAX_WS;i++) {
+                if (connections[i] == client) {
+                   connections[i] = NULL;
+                   break;
+                }
+              }
+              if (ws_edit_client==client) {
+                 // ADMIN EDITOR client has dropped
+                 ws_edit_client = NULL;
+                 out_driver.disableAdmin();
+ // LabRat Add a PUSH to remaining clients
+              }
+#endif
+            }
             break;
         case WS_EVT_PONG:
             LOG_PORT.println(F("* WS PONG *"));
@@ -608,4 +717,40 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     }
 }
 
+#ifdef ESPS_MODE_WNRF
+  // Async Callbacks from the WnrfDriver
+
+  // response to OTA FLASH request
+  void cb_flash (tDevId *id, void * context, int result) {
+     // If result is ok..
+     // Convert context into a client and send "FLASH" result
+  }
+
+  // response to APP: Update RF channel request
+  void cb_rfchan (tDevId *id, void * context, int result) {
+     // If result is ok..
+     // Convert context into a client and send "D4" result
+  }
+
+  // response to MTC: Update DeviceId request
+  void cb_devid (tDevId *id, void * context, int result) {
+     // If result is ok..
+     // Convert context into a client and send "D5" result
+  }
+
+  // response to MTC: Update E1.31 Channel request
+  void cb_startaddr(tDevId *id, void * context, int result) {
+
+  }
+
+
+  void register_nrf_callbacks () {
+     out_driver.nrf_async_otaflash = cb_flash;
+     out_driver.nrf_async_rfchan   = cb_rfchan;
+     out_driver.nrf_async_devid    = cb_devid;
+     out_driver.nrf_async_startaddr= cb_startaddr;
+
+     out_driver.nrf_async_devlist  = cb_devlist;
+  }
+#endif /*WNRF*/
 #endif /* ESPIXELSTICK_H_ */

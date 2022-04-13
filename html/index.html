@@ -296,21 +296,21 @@
         <form class="form-horizontal" onsubmit="return false">
           <div class="form-group devchk">
             <div class="col-sm-offset-2 col-sm-10">
-              <div class="checkbox"><label><input type="checkbox" id="dev_admin" name="dev_admin"> Device Admin </label></div>
+              <div class="checkbox"><label><input type="checkbox" id="dev_admin" name="dev_admin" autocomplete="off"/> Device Admin </label></div>
             </div>
           </div>
         </form>
       </fieldset>
 
+      <!-- Firmware Upload -->
       <div id="devadmin" class="form-group devadmin hidden">
         <fieldset>
-          <!-- Firmware Upload -->
           <div class="col-sm-6">
             <legend class="esps-legend">Client Firmware</legend>
             <div class = "form-group">
               <label class="control-label col-sm-2" for="nrf_fw">Hex File:</label>
               <span id="nrf_fw"></span><BR>
-              <form method = "POST" id="wnrfu" action = "/wnrfu" enctype="multipart/form-data">
+              <form method = "POST" id="wnrfu" action = "/wnrfu" target="devnull" enctype="multipart/form-data">
                 <label class="btn btn-primary btn-file">
                    Upload .HEX <input type="file" id="hex" accept=".hex" style="display: none;" name="data"/>
                 </label>
@@ -332,11 +332,14 @@
             </fieldset>
           </div>
         </fieldset>
+      </div>
 	<!--- Device EDIT form -->
+
+      <div id="devedit" class="form-group devedit hidden">
         <fieldset>
-          <div id="devedit" class="form-group devedit hidden">
+          <div id="bledit" class="col-sm-6 bledit">
+             <legend class="esps-legend">Boot Loader</legend>
              <form class="form-horizontal" onsubmit="return false">
-             <legend class="esps-legend">Device Edit</legend>
 
                <div class="form-group">
                  <label class="control-label col-sm-3">Device ID</label>
@@ -345,27 +348,33 @@
                  <div class="col-sm-9"><p class="form-control-static" id="ed_type"></p></div>
                  <label class="control-label col-sm-3">Loader</label>
                  <div class="col-sm-9"><p class="form-control-static" id="ed_blv"></p></div>
+                 <div class="form-group"><button id="ota" type="button" onclick="submit()" class="btn btn-danger" disabled>OTA LOAD</button></div>
+               </div>
+             </form>
+          </div>
+          <div id="apedit" class="col-sm-6 apedit hidden">
+             <legend class="esps-legend">Application Config</legend>
+             <form class="form-horizontal" onsubmit="return false">
                  <label class="control-label col-sm-3">FW Magic No.</label>
                  <div class="col-sm-9"><p class="form-control-static" id="ed_apm"></p></div>
                  <label class="control-label col-sm-3">FW Version</label>
                  <div class="col-sm-9"><p class="form-control-static" id="ed_apv">
-                   <div class="form-group"><p><button type="button" onclick="submit()" class="btn btn-danger">OTA LOAD</button></p></div>
-                   </p></div>
-               </div>
-               <div class="form-group">
+                 <div class="form-group">
                  <label class="control-label col-sm-3">Start Channel</label>
                  <div class="col-sm-9">
-                       <!--input size=4" maxlength="3" type="text" id="s_chanid" title="E.131 channel." onchange="editChan()"-->
                    <input type="range" min="1" max="512" id="s_chanid" oninput="this.nextElementSibling.value = this.value" onchange="editChan()">
                    <output id="channel"></output>
                  </div>
-               </div>
-               <div class="form-group"><p><button type="button" onclick="doneEdit()" class="btn btn-primary">Done</button></p></div>
-              </form>
+             </form>
           </div>
         </fieldset>
-       <!--End of Device Edit Form-->
+        <form class="form-horizontal" onsubmit="return false">
+        <div class="form-group"><center><button type="button" onclick="doneEdit()" class="btn btn-primary" onClick=" $('.devedit').addClass('hidden');">Done</button></center></div>
+         </form>
       </div>
+      
+      <!--End of Device Edit Form-->
+      <!--/div-->
     </div>
 
     <!-- Effects configuration -->
@@ -520,7 +529,7 @@
     </div>
   </div>
 
-  <div id="snackbar">Configuration Saved</div>
+  <div id="snackbar"></div>
 
   <!-- Reboot Modal -->
   <div id="reboot" class="modal fade" tabindex="-1" role="dialog">
@@ -569,7 +578,7 @@
     <div class="modal-dialog" role="document">
       <div class="modal-content">
         <div class="modal-header">
-          <h4 class="modal-title">Client Edit Binding</h4>
+          <h4 class="modal-title">Client Config</h4>
         </div>
         <div class="modal-body">
           <p>Sending BIND request to client device...</p>
@@ -592,7 +601,7 @@
   </div>
 
   <!-- Footer -->
-  <footer class="footer">
+  <footer class="footer" id="footer">
     <div class="container">
       <i><span id="name"></span></i>
     </div>
@@ -609,5 +618,6 @@
   <script>
     wsConnect();
   </script>
+  <iframe id="devnull" name="devnull" height="0" width="0" frameborder="0" scrolling="yes"></iframe>
 </body>
 </html>

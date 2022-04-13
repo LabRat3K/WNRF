@@ -668,6 +668,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
   if (!file) {
      // Something went wrong - invalid file handle
      request->send(500, "text/plain", "File Creation Error: " );
+     cb_upload_reply(500, (char *) filename.c_str());
   }
   if (len) {
      file.write(data,len);
@@ -679,13 +680,13 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
     LOG_PORT.print(", ");
     LOG_PORT.println(index+len);
     request->send(200, "text/plain", "File Upload Completed: " );
+    // Update filename
+    getFWName();
+    LOG_PORT.print(F("FILENAME:"));
+    LOG_PORT.print(fw_name);
+    LOG_PORT.print(".\n");
+    cb_upload_reply(200, fw_name);
   }
-  // Update filename
-  getFWName();
-  LOG_PORT.print(F("FILENAME:"));
-  LOG_PORT.print(fw_name);
-  LOG_PORT.print(".\n");
-  // Need to restructure so that this can trigger a WS push
 }
 
 // Configure and start the web server
@@ -916,6 +917,7 @@ void updateConfig() {
 #elif defined(ESPS_MODE_WNRF)
     out_driver.begin(config.nrf_baud, config.nrf_chan, config.channel_count);
     effects.begin(&out_driver, config.channel_count / 3 );
+    register_nrf_callbacks(); // Allow NRF driver to send ASYNC responses to WEB client
 #endif
 
     LOG_PORT.print(F("- Listening for "));
