@@ -280,8 +280,12 @@ void sendEditResponse(char cmd, bool result, AsyncWebSocketClient *client ) {
    serializeJson(admin, message);
    if (cmd=='a')  {
       client->text("Da"+message);
+      if (result)
+        digitalWrite(15,LOW); // Green
    } else {
       client->text("DA"+message);
+      if (result)
+        digitalWrite(15,HIGH); // Green
    }
 }
 
