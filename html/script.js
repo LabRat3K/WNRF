@@ -269,6 +269,15 @@ $(function() {
         }
     });
 
+    $('#ota').click(function() {
+      var json = {
+          'devid': $('#ed_devid').text()
+       };
+       wsEnqueue('D4' + JSON.stringify(json));
+       $('#update').modal();
+    });
+
+
     // Hostname, SSID, and Password validation
     $('#hostname').keyup(function() {
         wifiValidation();
@@ -460,6 +469,9 @@ function wsConnect() {
                     break;
                 case 'D3':
                     rxWnrfuReply(data);
+                    break;
+                case 'D4':
+                    rxOTAReply(data);
                     break;
                 case 'S1':
                     setConfig(data);
@@ -729,6 +741,24 @@ function rxAdminReplyDa(data) {
     admin_ctl=false;
 }
 
+function rxOTAReply(data) {
+    var ota = JSON.parse(data);
+
+    if (ota.result==0) {
+       // Delete device from the list - let refresh pickup the new values
+       var devindex =-1;
+       for (var i=0;i<devices.length;i++) {
+          if (devices[i].dev_id == ota.dev_id)  {
+             devices.splice(i,1);
+             break;
+          }
+       }
+    } else {
+       footermsg("OTA: Error on file upload ["+ota.result+"]");
+    }
+    $('#update').modal('hide');
+}
+
 function rxWnrfuReply(data) {
     var wnrfu = JSON.parse(data);
 
@@ -743,8 +773,6 @@ function rxWnrfuReply(data) {
 }
 
 function editDevice(devid) {
-     console.log("Searching for:"+devid+".\n");
-   
      // Click on Radio to close edit 
      if ($('#ed_devid').text() == devid) {
         doneEdit();
@@ -790,8 +818,6 @@ function editDevice(devid) {
 
      // Enabled the OTA update if ADMIN and HEX file is present
      if (admin_ctl) {
-        console.log("OTA status:"+$('#nrf_f').text());
-        console.log(($('#nrf_fw').text() === 'none'));
         $('#ota').prop('disabled',($('#nrf_fw').text() === 'none'));
      }
 
