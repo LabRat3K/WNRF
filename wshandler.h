@@ -32,7 +32,7 @@ extern WnrfDriver out_driver;       // Wnrf object
 #endif
 
 extern EffectEngine effects;    // EffectEngine for test modes
-
+extern char fw_name[40];
 extern ESPAsyncE131 e131;       // ESPAsyncE131 with X buffers
 extern ESPAsyncDDP  ddp;        // ESPAsyncDDP with X buffers
 extern config_t     config;     // Current configuration
@@ -48,6 +48,16 @@ AsyncWebSocketClient * connections[MAX_WS]={NULL,NULL,NULL,NULL,NULL};
 AsyncWebSocketClient * ws_edit_client;
 #endif
 
+void string2devId(String instr, tDevId * devId) {
+   uint64_t temp;
+   sscanf(instr.c_str(),"%lx",&temp);
+   devId->id[0]=temp&0xFF;
+   devId->id[1]=temp>>8&0xFF;
+   devId->id[2]=temp>>16&0xFF;
+}
+
+// Forward Declaration - code clean-up to fix
+  void cb_flash (tDevId *id, void * context, int result);
 /*
   Packet Commands
     E1 - Get Elements
@@ -280,12 +290,8 @@ void sendEditResponse(char cmd, bool result, AsyncWebSocketClient *client ) {
    serializeJson(admin, message);
    if (cmd=='a')  {
       client->text("Da"+message);
-      if (result)
-        digitalWrite(15,LOW); // Green
    } else {
       client->text("DA"+message);
-      if (result)
-        digitalWrite(15,HIGH); // Green
    }
 }
 
@@ -305,6 +311,8 @@ void cb_upload_reply (uint16_t retcode, char * fname) {
 void procD(uint8_t *data, AsyncWebSocketClient *client) {
     DynamicJsonDocument json(1024);
     DeserializationError error = deserializeJson(json, reinterpret_cast<char*>(data + 2));
+    JsonObject params = json.as<JsonObject>();
+
     switch (data[1]) {
         case 'A':
            // Highlander: There can be only ONE ADMIN control UI
@@ -331,8 +339,26 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
         case '2':
             LOG_PORT.println(F("(D2) CHANNEL update request**"));
             break;
-        case '4':
-            LOG_PORT.println(F("(D4) Send Updated OTA Firmware request**"));
+        case '4': {
+               tDevId tempid;
+               memset(tempid.id,0,sizeof(tempid));
+
+               if (ws_edit_client==client) {
+                  if (params.containsKey("devid")) {
+                     // Parse the string to a device id
+                     string2devId(params["devid"],&tempid);
+                     int retcode = out_driver.nrf_flash(&tempid, fw_name, client);
+
+                     if (retcode)
+                        cb_flash(&tempid, client, retcode);
+
+                  } else {
+                     cb_flash(&tempid,client, -2);
+                  }
+               } else {
+                  cb_flash(&tempid,client, -1);
+               }
+            }
             break;
         default : // Do Nothing
             break;
@@ -725,9 +751,21 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   // Async Callbacks from the WnrfDriver
 
   // response to OTA FLASH request
-  void cb_flash (tDevId *id, void * context, int result) {
-     // If result is ok..
-     // Convert context into a client and send "FLASH" result
+  void cb_flash (tDevId *devid, void * context, int result) {
+     char tempid[8];
+     char *bytes =(char *)&(devid->id);
+
+     sprintf(tempid,"%2.2X%2.2X%2.2X",bytes[2],bytes[1],bytes[0]);
+     DynamicJsonDocument json(1024);
+     JsonObject ota = json.createNestedObject("ota");
+       ota["result"] = result;
+       ota["dev_id"] = tempid;
+
+     String message;
+     serializeJson(ota, message);
+     if (context) {
+        ((AsyncWebSocketClient *) context)->text("D4" + message);
+     }
   }
 
   // response to APP: Update RF channel request
