@@ -114,6 +114,19 @@ WnrfDriver      out_driver;
 #define LED_WIFI 2
 #define LED_NRF  15 
 
+#define LED_OFF    0x0000
+#define BLINK_1HZ  0xFF00
+#define BLINK_2HZ  0xF0F0
+#define BEAT       ~(0x0033)
+#define FLICKER    ~(0x3030)
+// Avoid using this, so that we have visual that the main loop is operational
+#define SOLID      0xFFFF
+
+#ifdef LED_WIFI
+uint16_t led_state_wifi=LED_OFF;
+uint32_t led_timeout =0;
+uint16_t led_mask = 0x0001;
+#endif
 /////////////////////////////////////////////////////////
 //
 //  Forward Declarations
@@ -245,6 +258,9 @@ void setup() {
         config.ssid = ssid;
         config.passphrase = passphrase;
         initWifi();
+#if defined(LED_WIFI)
+        led_state_wifi = BLINK_1HZ;
+#endif
     }
 
     // If we fail again, go SoftAP or reboot
@@ -256,6 +272,9 @@ void setup() {
             WiFi.softAP(ssid.c_str());
             ourLocalIP = WiFi.softAPIP();
             ourSubnetMask = IPAddress(255,255,255,0);
+#if defined(LED_WIFI)
+            led_state_wifi = BEAT;
+#endif
         } else {
             LOG_PORT.println(F("*** FAILED TO ASSOCIATE WITH AP, REBOOTING ***"));
             ESP.restart();
@@ -263,7 +282,7 @@ void setup() {
     }
 
 #if defined(LED_WIFI)
-    digitalWrite(LED_WIFI, LOW);
+    //digitalWrite(LED_WIFI, LOW);
 #endif
     wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWiFiDisconnect);
 
@@ -1372,6 +1391,20 @@ void sendZCPPConfig(ZCPP_packet_t& packet) {
     zcpp.sendConfigResponse(&packet);
 }
 
+#if defined(LED_WIFI)
+void blink_led() {
+  // Divide timeout into 16 slices
+  if (millis()-led_timeout > (2000/16)) {
+     led_timeout = millis();
+#if defined(LED_WIFI)
+     digitalWrite(LED_WIFI,(led_state_wifi & led_mask)>0);
+#endif
+     led_mask<<=1;
+     if (!led_mask)
+       led_mask = 1;
+  }
+}
+#endif
 /////////////////////////////////////////////////////////
 //
 //  Main Loop
@@ -1386,6 +1419,9 @@ void loop() {
 
     bool doShow = true;
 
+#if defined(LED_WIFI) || defined(LED_NRF)
+    blink_led();
+#endif
     // Render output for current data source
     if ( (config.ds == DataSource::E131) || (config.ds == DataSource::ZCPP) || (config.ds == DataSource::DDP)  || (config.ds == DataSource::IDLEWEB) ) {
             // Parse a packet and update pixels
