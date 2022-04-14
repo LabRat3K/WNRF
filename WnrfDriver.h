@@ -42,10 +42,24 @@ typedef struct sDevId {
    unsigned char id[3];
 } tDevId;
 
+#define BIND_FLASH (0x00)
+#define BIND_DEVID (0x01)
+#define BIND_START (0x02)
+#define BIND_NONE (0xFF)
+
 typedef struct sPipeState {
-  uint8_t state;
   uint8_t txaddr[3];   // Address of the target device bound to this pipe
+  uint8_t rxaddr[3];   // Pipe Address for the target device to send to
+  uint8_t state;
+  uint8_t bind_reason;
+  union {
+         uint16_t start;
+         tDevId newId;
+        };
+  // CallBack context to the UI session
   void *  context;
+  // Timeout counter
+  uint8_t  waitCount;
   uint32_t waitTime;
 } tPipeInfo;
 
@@ -86,8 +100,8 @@ class WnrfDriver {
     void enableAdmin(void);
     void disableAdmin(void);
 
-    int  nrf_bind            (tDevId *devId, void * context);
-    int  nrf_flash           (tDevId *devId, FILE file, void * context);
+    int  nrf_bind            (tDevId *devId, uint8_t reason, void * context);
+    int  nrf_flash           (tDevId *devId, char *fname, void * context);
     int  nrf_rfchan_update   (tDevId *devId, uint8_t chan,  void * context);
     int  nrf_devid_update    (tDevId *devId, tDevId *newId,void * context);
     int  nrf_startaddr_update(tDevId *devId, uint16_t start, void * context);
@@ -102,6 +116,7 @@ class WnrfDriver {
 
     void sendNewDevId(tDevId  devId, tDevId  newId);
     void sendNewRFChan(tDevId  devId, uint8_t  chanId);
+
     int  clearContext(void * context);
 
     /* Set channel value at address */
@@ -158,7 +173,8 @@ class WnrfDriver {
     int  storeContext(void * context);
     int  getContext(uint8_t pipeid, void **context);
 
-    bool nrfTxBindRequest(uint8_t pipe);
+    bool tx_bind(uint8_t pipe);
+    void rx_ackbind(uint8_t pipe);
     void openBindPipe(uint8_t);
     void sendDeviceList(void);
 

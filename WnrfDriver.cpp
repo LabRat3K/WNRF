@@ -43,13 +43,12 @@
 #include "RF24.h"
 #include "WnrfDriver.h"
 #include <printf.h>
+#include <FS.h> // Defn of 'File'
 
 // Some common board pin assignments
 // WeMos R1
 //RF24 radio(D4,D8);
 // WNRF
-//LabRat Debug RF24 radio(D4,D3);
-//RF24 radio(D2,D1);
 RF24 radio(4,5);
 
 // BootLoader related states
@@ -64,6 +63,13 @@ RF24 radio(4,5);
 // Application related states
 #define NRF_CTL_W4_CHAN_ACK   (0x08)
 #define NRF_CTL_W4_DEVID_ACK  (0x09)
+
+#define LED_NRF 15
+
+// To do.. move into the Private Data and
+// accommodate multiple requests?
+//static File ota_file;
+File ota_files[MAX_P2P_PIPES];
 
 void WnrfDriver::printIt(void) {
    radio.printDetails();
@@ -153,12 +159,14 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     gadmin = false; //Never default to ADMIN mode
 
     gdevice_count = 0;
-    gctl_state = NRF_CTL_NONE; // Not bound to any device
     gbeacon_active = false;
 
     for (int i=0; i<MAX_P2P_PIPES;i++) {
        gPipes[i].state   = NRF_CTL_NONE;
        gPipes[i].context = NULL;
+       gPipes[i].bind_reason = BIND_NONE;
+       memcpy(gPipes[i].rxaddr,addr_wnrf_ctrl,3);
+       gPipes[i].rxaddr[0]=i+2;
     }
 
     /* Allocate the Buffer Space */
@@ -212,7 +220,6 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     radio.startListening();
     printf_begin();
 
-
     // Default counters and state for the LED output
     gled_state = 1;
     gled_count = 1;
@@ -221,15 +228,15 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
 
 void WnrfDriver::enableAdmin(void) {
     gadmin = true;
-    Serial.println("Enable ADMIN");
     gbeacon_active = true;
+    digitalWrite(LED_NRF,HIGH);
     sendBeacon();
 }
 
 void WnrfDriver::disableAdmin(void) {
     gadmin = false;
-    Serial.println("Disable ADMIN");
     gbeacon_active = false;
+    digitalWrite(LED_NRF,LOW);
 }
 
 /*
@@ -237,7 +244,6 @@ void WnrfDriver::disableAdmin(void) {
  * Passes a pointer to the next FRAME in the _dmxdata buffer,
  * to the RF24 pipeline
  */
-
 void WnrfDriver::show() {
     if (!gadmin) {
 	/* Send the packet */
@@ -253,7 +259,7 @@ void WnrfDriver::show() {
         }
         if (gled_count == 0) {
             gled_state ^=1;
-            digitalWrite(15, gled_state); // Blink when transmitting
+            digitalWrite(LED_NRF, gled_state); // Blink when transmitting
             if (gnum_channels ==32)
                 gled_count =44;   // Legacy mode 44 single fps target
             else
@@ -311,16 +317,16 @@ void WnrfDriver::sendDeviceList(void) {
            send_data = true;
          }
       } else {
-         if (gdevice_count==8) {
+         if (gdevice_count>8) {
             send_data = true;
          }
       }
 
       if (send_data) {
-         if (nrf_async_devlist) {
-            nrf_async_devlist(gdevice_list,gdevice_count);
-            gbeacon_client_response_timeout = millis();
-         }
+        if (nrf_async_devlist) {
+           nrf_async_devlist(gdevice_list,gdevice_count);
+           gbeacon_client_response_timeout = millis();
+        }
         gdevice_count = 0;
       }
    } else {
@@ -340,6 +346,7 @@ void WnrfDriver::parseNrf_x88(uint8_t *data) {
       temp->apv   = data[7];           // Boot Loader Version */
       temp->start = data[8]|(data[9]<<8);
 
+#ifdef DEBUG
       Serial.print("** Client Device detected [");
       for (int i=0;i<16;i++) {
          char hex[3];
@@ -347,6 +354,7 @@ void WnrfDriver::parseNrf_x88(uint8_t *data) {
          Serial.print(hex);
       }
       Serial.println("]");
+#endif
    }
    sendDeviceList();
 }
@@ -358,7 +366,6 @@ void WnrfDriver::sendBeacon() {
    if (gbeacon_active == true) {
       // Throttle to every 2 seconds
       if (millis()-gbeacon_timeout > 5000) {
-         Serial.println("Broadcasting Beacon");
          radio.stopListening();
          radio.openWritingPipe(addr_wnrf_ctrl);
          tempPacket[0]=0x85;
@@ -371,33 +378,60 @@ void WnrfDriver::sendBeacon() {
    }
 }
 
+void  WnrfDriver::rx_ackbind(uint8_t pipe) {
+    // Flag Pipe as Bound
+    // Look at Cached Request to determine next State
+    switch(gPipes[pipe].bind_reason) {
+       case BIND_FLASH:
+          Serial.print("BIND ACK success :");
+          Serial.println(pipe);
 
-void WnrfDriver::openBindPipe(uint8_t pipe) {
-   uint8_t rxaddr[3];
-
-   memcpy(rxaddr,addr_wnrf_ctrl,3);
-   rxaddr[0] = pipe+2;
-
-   radio.openReadingPipe(pipe+2,rxaddr);
-   radio.setAutoAck(pipe+2,true);
+// DEBUG - tell the WS we're good
+          if (nrf_async_otaflash) {
+            nrf_async_otaflash((tDevId *)gPipes[pipe].txaddr,gPipes[pipe].context, 0);
+            // Close the file
+            if (ota_files[pipe]) {
+               ota_files[pipe].close();
+               gPipes[pipe].state = NRF_CTL_NONE;
+            }
+          }
+// END DEBUG
+          // Hand control to the FILE parsing engine
+          break;
+       case BIND_DEVID:
+          // Send the "New Device Id" message
+          // Change state to W4_DEV ACK
+          break;
+       case BIND_START:
+          // Send the "New Device Id" message
+          // Change state to W4_START ACK
+          break;
+       default:
+          {
+           char errstr[80];
+           sprintf(errstr,"Unknown BIND ack: pipe=%d state=%d\n",pipe, gPipes[pipe].bind_reason);
+           // Send error
+           Serial.println(errstr);
+          }
+          break;
+    }
+    //    (Start Flash, ChanUp, DevId Up)
 }
 
-bool WnrfDriver::nrfTxBindRequest(uint8_t pipe) {
+bool WnrfDriver::tx_bind(uint8_t pipe) {
      uint8_t msg[32];
      bool retCode = false;
 
-         msg[0] = 0x87;
+        msg[0] = 0x87;
 
         // Allocate a pipe and send that address to the client
         // (for now use the default)
         // Format <0x87><DevId0><DevId1><DevId2><P2P0><P2P1><P2P2>
 
         memcpy(&(msg[1]),gPipes[pipe].txaddr,3);
-        memcpy(&(msg[4]),addr_wnrf_ctrl,3);
-        msg[4] = pipe+2;
+        memcpy(&(msg[4]),gPipes[pipe].rxaddr,3);
 
         msg[16]=millis()&0xff; // prevent issues of same payload being ignored
-
 
         radio.stopListening();   // Ready to write EN_RXADDR_P0 = 1
         radio.setAutoAck(0,false);// As a broadcast first ...
@@ -407,33 +441,37 @@ bool WnrfDriver::nrfTxBindRequest(uint8_t pipe) {
 
         retCode = radio.write(msg,32); // Want to get AA working here
 
-        openBindPipe(pipe);
+        radio.openReadingPipe(pipe+2,gPipes[pipe].rxaddr);
+        radio.setAutoAck(pipe+2,true);
         radio.startListening(); // EN_RXADDR_P0 = 0
 
         return retCode;
 }
 
 
-int WnrfDriver::nrf_bind(tDevId *devId, void * context) {
+int WnrfDriver::nrf_bind(tDevId *devId, uint8_t reason, void * context) {
    // Scan pipe list to see if a pipe is available
    int pipe = storeContext(context);
-
-   gbeacon_active = false; // Timeout handler can re-enable
 
    if (pipe == -1) {
       // Rejecting request - no Pipes available
       return -1;
    }
 
+   gbeacon_active = false; // Timeout handler can re-enable
+
    gPipes[pipe].state = NRF_CTL_W4_BIND_ACK;
    memcpy(gPipes[pipe].txaddr,(char *) devId, 3);
+   gPipes[pipe].bind_reason = reason;
 
    // Send the NRF BIND request
-   nrfTxBindRequest(pipe);
+   tx_bind(pipe);
 
    //   Start Timer
    gPipes[pipe].waitTime = millis();
-   return 0;
+   gPipes[pipe].waitCount = 0;
+
+   return pipe;
 }
 
 int WnrfDriver::sendGenericCmd(tDevId *devId, uint8_t cmd, uint16_t value) {
@@ -442,12 +480,14 @@ int WnrfDriver::sendGenericCmd(tDevId *devId, uint8_t cmd, uint16_t value) {
    // Address to the specific device
    memcpy(addr_device, devId, 3);
 
+#ifdef DEBUG
    Serial.print("Sending CMD: ");
    Serial.print(cmd);
    Serial.print(" to ");
    Serial.print(devId->id[2],HEX);
    Serial.print(devId->id[1],HEX);
    Serial.println(devId->id[0],HEX);
+#endif
 
    radio.stopListening();
    radio.openWritingPipe(addr_device);
@@ -510,6 +550,30 @@ int WnrfDriver::nrf_startaddr_update(tDevId *devId, uint16_t start, void * conte
   return  sendGenericCmd(devId, 0x01 /* cmd */, start);
 }
 
+
+int WnrfDriver::nrf_flash(tDevId *devId, char *fname, void * context) {
+   int retCode = -15;
+   // Check we can access the file?
+   if (fname) {
+      // Attempt to open the file
+      Serial.print("Opening ");
+      Serial.println(fname);
+
+      // Send the BIND and enter wait for BIND timeout
+      int pipe = nrf_bind(devId, BIND_FLASH, context);
+      if (pipe>=0) {
+         ota_files[pipe]= SPIFFS.open(fname,"r");
+         if (ota_files[pipe]) {
+            retCode = 0;
+         } else {
+            Serial.println("Failed to save context");
+         }
+      }
+   }
+   return retCode;
+}
+
+
 void WnrfDriver::checkRx() {
     /* Was there a received packet? */
     uint8_t pipe;
@@ -527,79 +591,99 @@ void WnrfDriver::checkRx() {
                   Serial.println("** A second WNRF is in the area!!");
                 }
            }
-        }
+        
+        } else {
 
-        if ((pipe==0) || (pipe>5)) {
-           Serial.print("ERROR: INVALID PIPE INDEX (");
-           Serial.print(pipe);
-           Serial.println(")");
-           return;
-        }
-
-        tPipeInfo * pid = &(gPipes[pipe-1]);
-
-        tDevId tempId;
-
-        // Deal with it
-        switch (pid->state) {
-           case NRF_CTL_BOUND:
-           case NRF_CTL_NONE: // Do nothing - warn the console?
-             break;
-           case NRF_CTL_W4_BIND_ACK:
-             if (payload[0] == 0x87) {
-               pid->state = NRF_CTL_BOUND;
-               // callback to inform the webSocket client
-             }
-             break;
-           case NRF_CTL_W4_SETUP_ACK:
-             if (payload[0] == 0x81) {
-               pid->state = NRF_CTL_W4_WRITE_ACK;
-               // callback to inform the webSocket client
-               // Blink LED to show BIND status?
-             }
-             break;
-           case NRF_CTL_W4_WRITE_ACK:
-             if (payload[0] == 0x82) {
-               pid->state = NRF_CTL_W4_COMMIT_ACK;
-               // callback to inform the webSocket client
-               // Blink LED to show BIND status?
-             }
-             break;
-           case NRF_CTL_W4_COMMIT_ACK:
-             if (payload[0] == 0x83) {
-               pid->state = NRF_CTL_BOUND;
-               // callback to inform the webSocket client
-               // Blink LED to show BIND status?
-             }
-             break;
-           case NRF_CTL_W4_AUDIT_ACK:
-             if (payload[0] == 0x84) {
-               pid->state = NRF_CTL_BOUND;
-               // callback to inform the webSocket client
-               // Blink LED to show BIND status?
-             }
-             break;
-           case NRF_CTL_W4_HEART_ACK:
-             if (payload[0] == 0x86) {
-               pid->state = NRF_CTL_BOUND;
-               // callback to inform the webSocket client
-               // Blink LED to show BIND status?
-             }
-             break;
-           default:
-             Serial.print("Unknown Rx packet: (");
+          if ((pipe<2) || (pipe>5)) {
+             Serial.print("ERROR: INVALID PIPE INDEX (");
              Serial.print(pipe);
-             Serial.print(") ");
-             for (int i=0;i<8;i++) {
-               char hex[3];
-               sprintf(hex,"%2.2x",payload[i]);
-               Serial.print(hex);
-             }
-             Serial.println(".");
-             break;
-        } // End Switch STATE
+             Serial.println(")");
+             return;
+          }
+
+          pipe -=2;  //Index into gPipes array
+
+          tPipeInfo * pid = &(gPipes[pipe]);
+
+          tDevId tempId;
+
+          // Deal with it
+          switch (pid->state) {
+             case NRF_CTL_W4_BIND_ACK:
+               if (payload[0] == 0x87) {
+                 rx_ackbind(pipe);
+               }
+               Serial.println("Ack completed");
+               break;
+             case NRF_CTL_W4_SETUP_ACK:
+               if (payload[0] == 0x81) {
+                 pid->state = NRF_CTL_W4_WRITE_ACK;
+                 // callback to inform the webSocket client
+                 // Blink LED to show BIND status?
+               }
+               break;
+             case NRF_CTL_W4_WRITE_ACK:
+               if (payload[0] == 0x82) {
+                 pid->state = NRF_CTL_W4_COMMIT_ACK;
+                 // callback to inform the webSocket client
+                 // Blink LED to show BIND status?
+               }
+               break;
+             case NRF_CTL_W4_COMMIT_ACK:
+               if (payload[0] == 0x83) {
+                 // callback to inform the webSocket client
+                 // Blink LED to show BIND status?
+                 // Send a REBOOT request
+               }
+               break;
+             case NRF_CTL_W4_AUDIT_ACK:
+               if (payload[0] == 0x84) {
+                 pid->state = NRF_CTL_BOUND;
+                 // callback to inform the webSocket client
+                 // Blink LED to show BIND status?
+               }
+               break;
+             case NRF_CTL_NONE: // Do nothing - warn the console?
+             default:
+               Serial.print("Unknown Rx packet: (");
+               Serial.print(pipe+2);
+               Serial.print(") ");
+               for (int i=0;i<8;i++) {
+                 char hex[3];
+                 sprintf(hex,"%2.2x",payload[i]);
+                 Serial.print(hex);
+               }
+               Serial.println(".");
+               break;
+          } // End Switch STATE
+       } // Pipe 2-5
     } // End handling of radio packet
 
+    // -- Check for Timeouts
+    uint32_t now = millis();
+    for (int i=0;i<MAX_P2P_PIPES;i++) {
+       tPipeInfo * pid = &gPipes[i];
+       switch (pid->state) {
+           case NRF_CTL_W4_BIND_ACK:
+              if (now - pid->waitTime > 1000) {
+                 if (pid->waitCount>10) {
+                    Serial.println("TIMEOUT waiting for BIND");
+                    // 10 second failure to bind
+                    nrf_async_otaflash((tDevId *)pid->txaddr,pid->context, -1);
+                    pid->state = NRF_CTL_NONE; 
+                    pid->context = NULL;
+                 } else {
+                    pid->waitTime = now;
+                    pid->waitCount++;
+                    Serial.println("Re-bind request");
+                    tx_bind(i);
+                 }
+              }
+              break;
+           default:
+              break;
+       }
+    }
     //  If in ADMIN mode - Timeouts
     sendBeacon();
     sendDeviceList();
