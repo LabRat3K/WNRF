@@ -320,6 +320,8 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
               out_driver.enableAdmin();
               ws_edit_client = client;
            }
+// Debugging - allow to gain control
+           ws_edit_client = client;
            sendEditResponse(data[1],(ws_edit_client==client),client);
            break;  // Turn off the Streaming Output
         case 'a':
@@ -353,10 +355,10 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
                         cb_flash(&tempid, client, retcode);
 
                   } else {
-                     cb_flash(&tempid,client, -2);
+                     cb_flash(&tempid,client, -21);
                   }
                } else {
-                  cb_flash(&tempid,client, -1);
+                  cb_flash(&tempid,client, -11);
                }
             }
             break;

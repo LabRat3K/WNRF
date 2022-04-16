@@ -42,10 +42,11 @@ typedef struct sDevId {
    unsigned char id[3];
 } tDevId;
 
-#define BIND_FLASH (0x00)
-#define BIND_DEVID (0x01)
-#define BIND_START (0x02)
-#define BIND_NONE (0xFF)
+#define BIND_FLASH  (0x00)
+#define BIND_DEVID  (0x01)
+#define BIND_START  (0x02)
+#define BIND_RFCHAN (0x03)
+#define BIND_NONE   (0xFF)
 
 typedef struct sPipeState {
   uint8_t txaddr[3];   // Address of the target device bound to this pipe
@@ -53,8 +54,15 @@ typedef struct sPipeState {
   uint8_t state;
   uint8_t bind_reason;
   union {
-         uint16_t start;
+         struct {
+            uint32_t offset;// File offset for seek/re-read attempts
+            uint16_t start; // Start Address in the PIC
+            uint32_t size;  // Number of bytes
+            uint16_t csum;  // Checksum over the entire upload space
+         } fw;
+         uint16_t e131_start;
          tDevId newId;
+         uint8_t  rf_chan;
         };
   // CallBack context to the UI session
   void *  context;
@@ -167,14 +175,25 @@ class WnrfDriver {
     // Functions
     void setBaud(NrfBaud baud);
     void setChan(NrfChan chanid);
-    int  sendGenericCmd(tDevId *devId, uint8_t cmd, uint16_t value);
+    bool sendGenericCmd(uint8_t pipe, uint8_t cmd, uint16_t value);
     void parseNrf_x88(uint8_t *data);
 
     int  storeContext(void * context);
     int  getContext(uint8_t pipeid, void **context);
 
     bool tx_bind(uint8_t pipe);
+    bool tx_setup(uint8_t pipe, bool resend);
+    bool tx_write(uint8_t pipe);
+    bool tx_commit(uint8_t pipe);
+    bool tx_audit(uint8_t pipe);
+    bool tx_reset(uint8_t pipe);
+
     void rx_ackbind(uint8_t pipe);
+    void rx_acksetup(uint8_t pipe);
+    void rx_ackwrite(uint8_t pipe);
+    void rx_ackcommit(uint8_t pipe);
+    void rx_ackaudit(uint8_t pipe, char result);
+
     void openBindPipe(uint8_t);
     void sendDeviceList(void);
 

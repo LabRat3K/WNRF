@@ -744,7 +744,7 @@ function rxAdminReplyDa(data) {
 function rxOTAReply(data) {
     var ota = JSON.parse(data);
 
-    if (ota.result==0) {
+    if (ota.result==1) {
        // Delete device from the list - let refresh pickup the new values
        var devindex =-1;
        for (var i=0;i<devices.length;i++) {
