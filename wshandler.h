@@ -48,16 +48,8 @@ AsyncWebSocketClient * connections[MAX_WS]={NULL,NULL,NULL,NULL,NULL};
 AsyncWebSocketClient * ws_edit_client;
 #endif
 
-void string2devId(String instr, tDevId * devId) {
-   uint64_t temp;
-   sscanf(instr.c_str(),"%lx",&temp);
-   devId->id[0]=temp&0xFF;
-   devId->id[1]=temp>>8&0xFF;
-   devId->id[2]=temp>>16&0xFF;
-}
-
 // Forward Declaration - code clean-up to fix
-  void cb_flash (tDevId *id, void * context, int result);
+  void cb_flash (tDevId id, void * context, int result);
 /*
   Packet Commands
     E1 - Get Elements
@@ -248,9 +240,10 @@ void cb_devlist(tDeviceInfo * dev_list, uint8_t count) {
       while (count--) {
          tDeviceInfo *dev = &(dev_list[count]);
 
+         id2txt(tempid, dev->dev_id);
          // Convert 3-byte address into a HEX string
-         char *bytes = (char *)&(dev->dev_id);
-         sprintf(tempid,"%2.2X%2.2X%2.2X",bytes[2],bytes[1],bytes[0]);
+         /*char *bytes = (char *)&(dev->dev_id);
+         sprintf(tempid,"%2.2X%2.2X%2.2X",bytes[2],bytes[1],bytes[0]); */
          JsonObject device = devList.createNestedObject(tempid);
             device["dev_id"]= tempid;    // Device Id
             device["type"]  = dev->type; // Device Type
@@ -294,6 +287,7 @@ void sendEditResponse(char cmd, bool result, AsyncWebSocketClient *client ) {
       client->text("DA"+message);
    }
 }
+
 
 void cb_upload_reply (uint16_t retcode, char * fname) {
    DynamicJsonDocument json(1024);
@@ -342,23 +336,22 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
             LOG_PORT.println(F("(D2) CHANNEL update request**"));
             break;
         case '4': {
-               tDevId tempid;
-               memset(tempid.id,0,sizeof(tempid));
+               tDevId tempid=0;
 
                if (ws_edit_client==client) {
                   if (params.containsKey("devid")) {
                      // Parse the string to a device id
-                     string2devId(params["devid"],&tempid);
-                     int retcode = out_driver.nrf_flash(&tempid, fw_name, client);
+                     tempid = txt2id(params["devid"].as<const char*>());
+                     int retcode = out_driver.nrf_flash(tempid, fw_name, client);
 
                      if (retcode)
-                        cb_flash(&tempid, client, retcode);
+                        cb_flash(tempid, client, retcode);
 
                   } else {
-                     cb_flash(&tempid,client, -21);
+                     cb_flash(tempid,client, -21);
                   }
                } else {
-                  cb_flash(&tempid,client, -11);
+                  cb_flash(tempid,client, -11);
                }
             }
             break;
@@ -753,11 +746,10 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   // Async Callbacks from the WnrfDriver
 
   // response to OTA FLASH request
-  void cb_flash (tDevId *devid, void * context, int result) {
+  void cb_flash (tDevId devid, void * context, int result) {
      char tempid[8];
-     char *bytes =(char *)&(devid->id);
 
-     sprintf(tempid,"%2.2X%2.2X%2.2X",bytes[2],bytes[1],bytes[0]);
+     id2txt(tempid,devid);
      DynamicJsonDocument json(1024);
      JsonObject ota = json.createNestedObject("ota");
        ota["result"] = result;
@@ -771,19 +763,19 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   }
 
   // response to APP: Update RF channel request
-  void cb_rfchan (tDevId *id, void * context, int result) {
+  void cb_rfchan (tDevId id, void * context, int result) {
      // If result is ok..
      // Convert context into a client and send "D4" result
   }
 
   // response to MTC: Update DeviceId request
-  void cb_devid (tDevId *id, void * context, int result) {
+  void cb_devid (tDevId id, void * context, int result) {
      // If result is ok..
      // Convert context into a client and send "D5" result
   }
 
   // response to MTC: Update E1.31 Channel request
-  void cb_startaddr(tDevId *id, void * context, int result) {
+  void cb_startaddr(tDevId id, void * context, int result) {
 
   }
 

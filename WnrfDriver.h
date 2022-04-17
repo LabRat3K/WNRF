@@ -38,19 +38,15 @@ enum class NrfChan : uint8_t {
     NRFCHAN_G        /* 82..83 */
 };
 
-typedef struct sDevId {
-   unsigned char id[3];
-} tDevId;
 
-#define BIND_FLASH  (0x00)
-#define BIND_DEVID  (0x01)
-#define BIND_START  (0x02)
-#define BIND_RFCHAN (0x03)
-#define BIND_NONE   (0xFF)
+typedef uint32_t tDevId;
+
+uint32_t txt2id(const char* str);
+void id2txt(char * str, uint32_t id);
 
 typedef struct sPipeState {
-  uint8_t txaddr[3];   // Address of the target device bound to this pipe
-  uint8_t rxaddr[3];   // Pipe Address for the target device to send to
+  tDevId txaddr;   // Address of the target device bound to this pipe
+  tDevId rxaddr;   // Pipe Address for the target device to send to
   uint8_t state;
   uint8_t bind_reason;
   union {
@@ -84,13 +80,13 @@ typedef struct sDeviceInfo {
   uint16_t start;  //E1.31 channel_start;
 } tDeviceInfo;
 
-typedef void (* async_bind_handler)(tDevId *devId, void * context, int result);
-typedef void (* async_flash_handler)(tDevId *devId, void * context, int result);
-typedef void (* async_rfchan_handler)(tDevId *devId, void * context, int result);
-typedef void (* async_devid_handler)(tDevId *devId, void * context, int result);
-typedef void (* async_startaddr_handler)(tDevId *devId, void * context, int result);
+typedef void (* async_bind_handler)     (tDevId devId, void * context, int result);
+typedef void (* async_flash_handler)    (tDevId devId, void * context, int result);
+typedef void (* async_rfchan_handler)   (tDevId devId, void * context, int result);
+typedef void (* async_devid_handler)    (tDevId devId, void * context, int result);
+typedef void (* async_startaddr_handler)(tDevId devId, void * context, int result);
 
-typedef void (* async_devlist_handler)(tDeviceInfo * dev_ist, uint8_t count);
+typedef void (* async_devlist_handler)  (tDeviceInfo * dev_ist, uint8_t count);
 
 class WnrfDriver {
  public:
@@ -108,11 +104,11 @@ class WnrfDriver {
     void enableAdmin(void);
     void disableAdmin(void);
 
-    int  nrf_bind            (tDevId *devId, uint8_t reason, void * context);
-    int  nrf_flash           (tDevId *devId, char *fname, void * context);
-    int  nrf_rfchan_update   (tDevId *devId, uint8_t chan,  void * context);
-    int  nrf_devid_update    (tDevId *devId, tDevId *newId,void * context);
-    int  nrf_startaddr_update(tDevId *devId, uint16_t start, void * context);
+    int  nrf_bind            (tDevId devId, uint8_t reason, void * context);
+    int  nrf_flash           (tDevId devId, char *fname, void * context);
+    int  nrf_rfchan_update   (tDevId devId, uint8_t chan,  void * context);
+    int  nrf_devid_update    (tDevId devId, tDevId newId,void * context);
+    int  nrf_startaddr_update(tDevId devId, uint16_t start, void * context);
 
     // Async Functions - callback context
     async_bind_handler      nrf_async_bind;
@@ -122,7 +118,7 @@ class WnrfDriver {
     async_startaddr_handler nrf_async_startaddr;
     async_devlist_handler   nrf_async_devlist;
 
-    void sendNewDevId(tDevId  devId, tDevId  newId);
+    void sendNewDevId (tDevId  devId, tDevId  newId);
     void sendNewRFChan(tDevId  devId, uint8_t  chanId);
 
     int  clearContext(void * context);

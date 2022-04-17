@@ -65,11 +65,33 @@ RF24 radio(4,5);
 
 #define LED_NRF 15
 
+
+// Common BIND routines, so need to store
+// the reason (and parameters) for the BIND
+// request
+#define BIND_FLASH  (0x00)
+#define BIND_DEVID  (0x01)
+#define BIND_START  (0x02)
+#define BIND_RFCHAN (0x03)
+#define BIND_NONE   (0xFF)
+
 // To do.. move into the Private Data and
 // accommodate multiple requests?
 //static File ota_file;
 File ota_files[MAX_P2P_PIPES];
 
+// Device Id Conversion routines
+uint32_t txt2id(const char* str){
+  uint32_t temp=0x00;
+  sscanf(str,"%lx",&temp);
+  return (temp);
+}
+
+void id2txt(char * str, uint32_t id) {
+  sprintf(str,"%6.6lX",id);
+}
+
+// Debugging Code
 void WnrfDriver::printIt(void) {
    radio.printDetails();
 }
@@ -135,10 +157,12 @@ int WnrfDriver::begin() {
 
 // E1.31 addresses (Legacy and New)
 byte addr_legacy[] = {0x81, 0xF0, 0xF0, 0xF0, 0xF0};
-byte addr_wnrf_bcast[] = {0xde,0xfa,0xda};
+//byte addr_wnrf_bcast[] = {0xde,0xfa,0xda};
+uint32_t addr_wnrf_bcast = 0xDAFADE;
 
 // Address of the WNRF server
-byte addr_wnrf_ctrl[]  = {0xC1,0xDE,0xC0}; // Was LEDCTL (1EDC71)
+//byte addr_wnrf_ctrl[]  = {0xC1,0xDE,0xC0}; // Was LEDCTL (1EDC71)
+uint32_t addr_wnrf_ctrl = 0xC0DEC1;
 
 int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
     byte NrfRxAddress[] = {0xFF,0x3A,0x66,0x65,0x76};
@@ -146,10 +170,12 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
 
     // Async Functions - callback context
     nrf_async_otaflash=NULL;
+    nrf_async_devlist=NULL;
+
+    // These aren't done yet
     nrf_async_rfchan=NULL;
     nrf_async_devid=NULL;
     nrf_async_startaddr=NULL;
-    nrf_async_devlist=NULL;
 
 
     gnum_channels = chan_size;
@@ -163,8 +189,7 @@ int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
        gPipes[i].state   = NRF_CTL_NONE;
        gPipes[i].context = NULL;
        gPipes[i].bind_reason = BIND_NONE;
-       memcpy(gPipes[i].rxaddr,addr_wnrf_ctrl,3);
-       gPipes[i].rxaddr[0]=i+2;
+       gPipes[i].rxaddr = addr_wnrf_ctrl&0xFFFF00 | (i+2)&0xFF;
     }
 
     /* Allocate the Buffer Space */
@@ -339,12 +364,12 @@ void WnrfDriver::parseNrf_x88(uint8_t *data) {
       char tempid[8];
       tDeviceInfo *temp = &(gdevice_list[gdevice_count++]);
 
-      memcpy(&(temp->dev_id),&data[1],3); // Device Id
-      temp->type  = data[4];           // Device Type
-      temp->blv   = data[5];           // Boot Loader Version */
-      temp->apm   = data[6];           // App Magic Number */
-      temp->apv   = data[7];           // Boot Loader Version */
-      temp->start = data[8]|(data[9]<<8);
+      temp->dev_id = data[3]<<16|data[2]<<8|data[1]; // Device Id
+      temp->type   = data[4];           // Device Type
+      temp->blv    = data[5];           // Boot Loader Version */
+      temp->apm    = data[6];           // App Magic Number */
+      temp->apv    = data[7];           // Boot Loader Version */
+      temp->start  = data[8]|(data[9]<<8);
 
       Serial.print("** Client Device detected [");
       for (int i=1;i<4;i++) {
@@ -381,7 +406,7 @@ void WnrfDriver:: rx_ackaudit(uint8_t pipe, char result) {
  Serial.println("Rx audit ACK");
      pid->state = NRF_CTL_NONE;
      if (nrf_async_otaflash) {
-        nrf_async_otaflash((tDevId *)pid->txaddr,pid->context, result);
+        nrf_async_otaflash(pid->txaddr,pid->context, result);
      }
 
      // Send a reboot request to the client device
@@ -660,8 +685,16 @@ bool WnrfDriver::tx_bind(uint8_t pipe) {
       // (for now use the default)
       // Format <0x87><DevId0><DevId1><DevId2><P2P0><P2P1><P2P2>
   Serial.println("Sending Bind request");
-      memcpy(&(msg[1]),gPipes[pipe].txaddr,3);
-      memcpy(&(msg[4]),gPipes[pipe].rxaddr,3);
+
+   // Will this work to copy lower 3 bytes from the uint32_t?
+      memcpy(&(msg[1]),&gPipes[pipe].txaddr,3);
+      memcpy(&(msg[4]),&gPipes[pipe].rxaddr,3);
+
+   Serial.print("MSG:");
+   for (int i=0;i<6;i++) {
+      Serial.print(msg[0],HEX);
+   }
+   Serial.println(".");
 
       radio.openReadingPipe(pipe+2,gPipes[pipe].rxaddr);
       radio.setAutoAck(pipe+2,true);
@@ -685,7 +718,7 @@ bool WnrfDriver::tx_bind(uint8_t pipe) {
 }
 
 
-int WnrfDriver::nrf_bind(tDevId *devId, uint8_t reason, void * context) {
+int WnrfDriver::nrf_bind(tDevId devId, uint8_t reason, void * context) {
    // Scan pipe list to see if a pipe is available
    int pipe = storeContext(context);
 
@@ -697,7 +730,7 @@ int WnrfDriver::nrf_bind(tDevId *devId, uint8_t reason, void * context) {
    gbeacon_active = false; // Timeout handler can re-enable
 
    gPipes[pipe].state = NRF_CTL_W4_BIND_ACK;
-   memcpy(gPipes[pipe].txaddr,(char *) devId, 3);
+   gPipes[pipe].txaddr = devId;
    gPipes[pipe].bind_reason = reason;
 
    // Send the NRF BIND request
@@ -733,7 +766,7 @@ bool WnrfDriver::sendGenericCmd(uint8_t pipe, uint8_t cmd, uint16_t value) {
    return retCode;
 }
 
-int WnrfDriver::nrf_devid_update(tDevId *devId, tDevId *newId, void * context) {
+int WnrfDriver::nrf_devid_update(tDevId devId, tDevId newId, void * context) {
   int retCode = -1;
   byte msg[32];
 
@@ -743,18 +776,15 @@ int WnrfDriver::nrf_devid_update(tDevId *devId, tDevId *newId, void * context) {
       int pipe = nrf_bind(devId, BIND_DEVID, context);
       if (pipe>=0) {
          tPipeInfo * pid = &(gPipes[pipe]);
-         memcpy(&(pid->newId.id[0]), &(newId->id[0]), 3);
+         pid->newId = newId;
          retCode =0 ;
       }
 
       Serial.print("MTC CMD: PROG DEVICE: ");
-      Serial.print(devId->id[2],HEX);
-      Serial.print(devId->id[1],HEX);
-      Serial.print(devId->id[0],HEX);
+      Serial.print(devId,HEX);
       Serial.print(" to ");
-      Serial.print(newId->id[2],HEX);
-      Serial.print(newId->id[1],HEX);
-      Serial.println(newId->id[0],HEX);
+      Serial.print(newId,HEX);
+
 /* Move to a TX_yyy handler
          radio.stopListening();
          radio.openWritingPipe(addr_device);
@@ -773,7 +803,7 @@ int WnrfDriver::nrf_devid_update(tDevId *devId, tDevId *newId, void * context) {
   return retCode;
 }
 
-int WnrfDriver::nrf_rfchan_update(tDevId *devId, uint8_t chanId, void * context) {
+int WnrfDriver::nrf_rfchan_update(tDevId devId, uint8_t chanId, void * context) {
   int retCode = -1;
 
   // Add some chanId validation?
@@ -792,7 +822,7 @@ int WnrfDriver::nrf_rfchan_update(tDevId *devId, uint8_t chanId, void * context)
   return retCode;
 }
 
-int WnrfDriver::nrf_startaddr_update(tDevId *devId, uint16_t start, void * context) {
+int WnrfDriver::nrf_startaddr_update(tDevId devId, uint16_t start, void * context) {
   int retCode = -1;
   // Check we can access the file?
   if (start<512){
@@ -816,7 +846,7 @@ int WnrfDriver::nrf_startaddr_update(tDevId *devId, uint16_t start, void * conte
 }
 
 
-int WnrfDriver::nrf_flash(tDevId *devId, char *fname, void * context) {
+int WnrfDriver::nrf_flash(tDevId devId, char *fname, void * context) {
    int retCode = -15;
    // Check we can access the file?
    if (fname) {
@@ -944,7 +974,7 @@ void WnrfDriver::checkRx() {
              if (pid->waitCount>10) {
                 Serial.println("TIMEOUT waiting for ACK");
                 // >10 second failure to ACK - drop the attempt
-                nrf_async_otaflash((tDevId *)pid->txaddr,pid->context, -1);
+                nrf_async_otaflash(pid->txaddr,pid->context, -1);
                 pid->state = NRF_CTL_NONE;
                 pid->context = NULL;
              } else {
