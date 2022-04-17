@@ -18,7 +18,13 @@
 
 #ifndef WNRFDRIVER_H_
 #define WNRFDRIVER_H_
-
+#define WEMOS_D1
+#ifdef WEMOS_D1
+   #define LED_NRF 10
+#else
+   // WNRF
+   #define LED_NRF 15
+#endif
 enum class NrfBaud : uint8_t {
     BAUD_1Mbps,
     BAUD_2Mbps

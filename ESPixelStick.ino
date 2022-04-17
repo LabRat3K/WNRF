@@ -112,7 +112,7 @@ WnrfDriver      out_driver;
 #endif
 
 #define LED_WIFI 2
-#define LED_NRF  15 
+// LED_NRF comes from WnrfDriver.h
 
 #define LED_OFF    0x0000
 #define BLINK_1HZ  0xFF00

@@ -47,10 +47,13 @@
 #include "HexParser.h"
 
 // Some common board pin assignments
-// WeMos R1
-//RF24 radio(D4,D8);
-// WNRF
-RF24 radio(4,5);
+#ifdef WEMOS_D1
+   // WeMos R1
+   RF24 radio(D4,D8);
+#else
+   // WNRF
+   RF24 radio(4,5);
+#endif
 
 // BootLoader related states
 #define NRF_CTL_NONE          (0x00)
@@ -63,7 +66,6 @@ RF24 radio(4,5);
 #define NRF_CTL_W4_CHAN_ACK   (0x06)
 #define NRF_CTL_W4_DEVID_ACK  (0x07)
 
-#define LED_NRF 15
 
 
 // Common BIND routines, so need to store
