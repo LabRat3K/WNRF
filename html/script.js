@@ -728,6 +728,9 @@ function rxAdminReplyDA(data) {
        footermsg("WNRF: Error processing request (likely second user)");
     } else {
        admin_ctl = true;
+       var x = document.getElementById('stat_mode');
+       x.style.color="RED";
+       $('#stat_mode').text("ADMIN");
     }
 }
 
@@ -737,7 +740,9 @@ function rxAdminReplyDa(data) {
     if (admin.result == false) {
        footermsg("WNRF: Error processing request (likely second user)");
     }
-
+    var x = document.getElementById('stat_mode');
+    x.style.color="BLACK";
+    $('#stat_mode').text("BROADCAST");
     admin_ctl=false;
 }
 
@@ -1037,7 +1042,7 @@ function getJsonStatus(data) {
 // getNrfStatus
     $('#stat_chan').text(status.nrf.chan);
     $('#stat_rate').text(status.nrf.baud);
-    $('#stat_count').text("0");
+    $('#stat_mode').text(status.nrf.mode);
 }
 
 function refreshGamma(data) {

@@ -137,6 +137,11 @@ void procX(uint8_t *data, AsyncWebSocketClient *client) {
             } else {
                nrf["baud"] = "1 Mbps";
             }
+            if (ws_edit_client == NULL) {
+               nrf["mode"] = "BROADCAST";
+            } else {
+               nrf["mode"] = "ADMIN";
+            }
  //
  // To Do: add count after we start probing devices
  //
@@ -375,7 +380,11 @@ void procG(uint8_t *data, AsyncWebSocketClient *client) {
             DynamicJsonDocument json(1024);
 
             json["ssid"] = (String)WiFi.SSID();
-            json["hostname"] = (String)WiFi.hostname();
+            if (WiFi.hostname().isEmpty()){
+               json["hostname"] = config.hostname.c_str();
+            } else {
+               json["hostname"] = (String)WiFi.hostname();
+            }
             json["ip"] = WiFi.localIP().toString();
             json["mac"] = WiFi.macAddress();
             json["version"] = (String)VERSION;
