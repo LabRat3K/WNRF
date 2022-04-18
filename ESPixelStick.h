@@ -20,7 +20,7 @@
 #ifndef ESPIXELSTICK_H_
 #define ESPIXELSTICK_H_
 
-const char VERSION[] = "3.2";
+const char VERSION[] = "0.1";
 const char BUILD_DATE[] = __DATE__;
 
 // Mode configuration moved to Mode.h to ease things with Travis
@@ -39,13 +39,17 @@ const char BUILD_DATE[] = __DATE__;
 #include "PixelDriver.h"
 #elif defined(ESPS_MODE_SERIAL)
 #include "SerialDriver.h"
+#elif defined(ESPS_MODE_WNRF)
+#include "WnrfDriver.h"
 #endif
 
 #include "EffectEngine.h"
 
 #define HTTP_PORT       80      /* Default web server port */
 #define MQTT_PORT       1883    /* Default MQTT port */
-#define DATA_PIN        2       /* Pixel output - GPIO2 (D4 on NodeMCU) */
+#if defined(ESPS_MODE_PIXEL)
+    #define DATA_PIN        2   /* Pixel output - GPIO2 (D4 on NodeMCU) */
+#endif
 #define UNIVERSE_MAX    512     /* Max channels in a DMX Universe */
 #define PIXEL_LIMIT     1360    /* Total pixel limit - 40.85ms for 8 universes */
 #define RENARD_LIMIT    2048    /* Channel limit for serial outputs */
@@ -66,14 +70,9 @@ const char BUILD_DATE[] = __DATE__;
 #define CONFIG_MAX_SIZE 4096    /* Sanity limit for config file */
 
 // Pixel Types
-class DevCap {
- public:
-    bool MPIXEL : 1;
-    bool MSERIAL : 1;
-    uint8_t toInt() {
-        return (MSERIAL << 1 | MPIXEL);
-    }
-};
+#define MODE_PIXEL  (0x00)
+#define MODE_SERIAL (0x01)
+#define MODE_NRF    (0x02)
 
 // Data Source to use
 enum class DataSource : uint8_t {
@@ -89,7 +88,7 @@ enum class DataSource : uint8_t {
 typedef struct {
     /* Device */
     String      id;             /* Device ID */
-    DevCap      devmode;        /* Used for reporting device mode, not stored */
+    uint8_t     devmode;        /* Used for reporting device mode, not stored */
     DataSource  ds;             /* Used to track current data source, not stored */
 
 
@@ -118,6 +117,7 @@ typedef struct {
     uint16_t effect_idletimeout;
 
 
+#ifdef MQTT
     /* MQTT */
     bool        mqtt;           /* Use MQTT? */
     String      mqtt_ip = " ";
@@ -128,6 +128,7 @@ typedef struct {
     bool        mqtt_clean;
     bool        mqtt_hadisco;
     String      mqtt_haprefix;
+#endif
 
     /* E131 */
     uint16_t    universe;       /* Universe to listen for */
@@ -148,6 +149,10 @@ typedef struct {
     /* Serial */
     SerialType  serial_type;    /* Serial type */
     BaudRate    baudrate;       /* Baudrate */
+#elif defined(ESPS_MODE_WNRF)
+    NrfChan     nrf_chan;       /* Radio Frequency       */
+    NrfBaud     nrf_baud;       /* Baudrate 250k/1Mb/2Mb */
+    bool        nrf_legacy;     /* Support Early NRF designs (32 byte payload) */
 #endif
 } config_t;
 

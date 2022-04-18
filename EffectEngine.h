@@ -9,6 +9,8 @@
     #define DRIVER PixelDriver
 #elif defined(ESPS_MODE_SERIAL)
     #define DRIVER SerialDriver
+#elif defined(ESPS_MODE_WNRF)
+    #define DRIVER WnrfDriver
 #endif
 
 class EffectEngine;
