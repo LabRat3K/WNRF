@@ -16,7 +16,7 @@ $.fn.modal.Constructor.DEFAULTS.keyboard = false;
 
 var admin_ctl=false;
 
-// Histogram 
+// Histogram
 histData=[];
 histPhase = 0;
 
@@ -61,7 +61,7 @@ $(function() {
             $('#hexup').modal();
             $('#wnrfu').submit();
             // Wait for server response (or timeout) to clear the modal
- // Add a timeout handler here.. *OR* can we probe the hidden frame to 
+ // Add a timeout handler here.. *OR* can we probe the hidden frame to
  // see it's status?
           });
 
@@ -415,7 +415,7 @@ function wsConnect() {
 
 // accept ?target=10.0.0.123 to make a WS connection to another device
         if (target = param('target')) {
-// 
+//
         } else {
             target = document.location.host;
         }
@@ -503,12 +503,12 @@ function wsConnect() {
                    if ($('#hist').is(':visible')) {
                       wsEnqueue('V2');
                    }
-                } else { 
+                } else {
                    drawStream(streamData);
                    if ($('#diag').is(':visible')) {
                       wsEnqueue('V1');
                    }
-                } 
+                }
             }
             wsReadyToSend();
         };
@@ -663,8 +663,8 @@ function showDevices() {
     // Code to re-populated the HTML <TABLE>
     var table = document.getElementById("nrf_list");
     var rowCount = table.rows.length;
-   
-    // Update by deleting everything and then adding again 
+
+    // Update by deleting everything and then adding again
     // start at 1 to leave the table header
     for (var i=1;i<rowCount;i++) {
        table.deleteRow(1);
@@ -701,7 +701,7 @@ function auditDevices() { // a 5 second periodic
 
 function getDevices(data) {
     var devlist = JSON.parse(data);
-  
+
     for (var i in devlist) {
        // For each parsed device - see if it is already in the array
        var index = devices.findIndex(item => item.dev_id === i);
@@ -717,7 +717,7 @@ function getDevices(data) {
         } else {
            devices[index].audit=6; // Renew it's lease
         }
-    } 
+    }
 }
 
 function rxAdminReplyDA(data) {
@@ -730,6 +730,8 @@ function rxAdminReplyDA(data) {
        admin_ctl = true;
        var x = document.getElementById('stat_mode');
        x.style.color="RED";
+       x = document.getElementById('status');
+       x.style.color='red';
        $('#stat_mode').text("ADMIN");
     }
 }
@@ -743,6 +745,8 @@ function rxAdminReplyDa(data) {
     var x = document.getElementById('stat_mode');
     x.style.color="BLACK";
     $('#stat_mode').text("BROADCAST");
+    x = document.getElementById('status');
+    x.style.color="#9d9ded";
     admin_ctl=false;
 }
 
@@ -778,13 +782,13 @@ function rxWnrfuReply(data) {
 }
 
 function editDevice(devid) {
-     // Click on Radio to close edit 
+     // Click on Radio to close edit
      if ($('#ed_devid').text() == devid) {
         doneEdit();
         return;
      }
 
-    // Update by deleting everything and then adding again 
+    // Update by deleting everything and then adding again
     // start at 1 to leave the table header
     var devindex =-1;
     for (var i=0;i<devices.length;i++) {
@@ -793,7 +797,7 @@ function editDevice(devid) {
           break;
        }
     }
-   
+
    if (devindex==-1) {
       footermsg('Device no longer in range');
       return;
@@ -806,7 +810,11 @@ function editDevice(devid) {
 
 
      $('#ed_devid').text(device.dev_id);
-     $('#ed_type').text(device.type);
+     //$('#ed_type').text(device.type);
+     if (device.type == 0)
+        $('#ed_type').text('16F1823');
+     else
+        $('#ed_type').text('N/A');
      $('#ed_blv').text(((device.blv>>4)&0x0F)+'.'+((device.blv&0x0F)));
      $('#ed_apm').text(device.apm);
      $('#ed_apv').text( ((device.apv>>4)&0x0F)+'.'+((device.apv&0x0F)));
@@ -1063,7 +1071,7 @@ function refreshGamma(data) {
 }
 
 function footermsg(message) {
-    // Show footer msg 
+    // Show footer msg
     var x = document.getElementById('footer');
     var bg = x.style.background;
     var fg = x.style.color;
@@ -1073,7 +1081,7 @@ function footermsg(message) {
     x.style.background='rgb(255,48,48)';
     x.style.color="white";
     $('#name').text(message);
-    
+
     setTimeout(function(){
         $('#name').text(msg);
         //x.style.background='rgb(14,14,14)';

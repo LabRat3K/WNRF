@@ -145,6 +145,8 @@ RF_PRE_INIT() {
     system_phy_set_max_tpw(82);         // Set max TX power
 }
 
+void ZCPPSub(); // Forward declaration
+
 void setup() {
     // Configure SDK params
     wifi_set_sleep_type(NONE_SLEEP_T);

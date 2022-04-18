@@ -18,9 +18,9 @@
 
 #ifndef WNRFDRIVER_H_
 #define WNRFDRIVER_H_
-#define WEMOS_D1
+//#define WEMOS_D1
 #ifdef WEMOS_D1
-   #define LED_NRF 10
+   #define LED_NRF D5
 #else
    // WNRF
    #define LED_NRF 15

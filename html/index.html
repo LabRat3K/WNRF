@@ -23,7 +23,7 @@
           <span class="icon-bar"></span>
           <span class="icon-bar"></span>
         </button>
-        <a class="navbar-brand" href="#">WNRF</a>
+        <a id="status" class="navbar-brand" href="#">WNRF</a>
       </div>
       <div id="navbar" class="collapse navbar-collapse">
         <ul class="nav navbar-nav">
@@ -341,30 +341,23 @@
              <legend class="esps-legend">Boot Loader</legend>
              <form class="form-horizontal" onsubmit="return false">
 
-               <div class="form-group">
-                 <label class="control-label col-sm-3">Device ID</label>
-                 <div class="col-sm-9"><p class="form-control-static" id="ed_devid"></p></div>
-                 <label class="control-label col-sm-3">Type</label>
-                 <div class="col-sm-9"><p class="form-control-static" id="ed_type"></p></div>
-                 <label class="control-label col-sm-3">Loader</label>
-                 <div class="col-sm-9"><p class="form-control-static" id="ed_blv"></p></div>
-                 <div class="form-group"><button id="ota" type="button" class="btn btn-danger" disabled>OTA LOAD</button></div>
-               </div>
+               <table class="esps-table">
+                 <tr><td width="25%">Device ID</td><td><span id="ed_devid"></span></td></tr>
+                 <tr><td width="25%">Type</td><td><span id="ed_type"></span></td></tr>
+                 <tr><td width="25%">Loader</td><td><span id="ed_blv"></span></td></tr>
+                 <tr><th colpsan=2><div class="form-group"><button id="ota" type="button" class="btn btn-danger" disabled>OTA LOAD</button></div></th></tr>
+               </table>
              </form>
           </div>
           <div id="apedit" class="col-sm-6 apedit hidden">
              <legend class="esps-legend">Application Config</legend>
              <form class="form-horizontal" onsubmit="return false">
-                 <label class="control-label col-sm-3">FW Magic No.</label>
-                 <div class="col-sm-9"><p class="form-control-static" id="ed_apm"></p></div>
-                 <label class="control-label col-sm-3">FW Version</label>
-                 <div class="col-sm-9"><p class="form-control-static" id="ed_apv">
-                 <div class="form-group">
-                 <label class="control-label col-sm-3">Start Channel</label>
-                 <div class="col-sm-9">
-                   <input type="range" min="1" max="512" id="s_chanid" oninput="this.nextElementSibling.value = this.value" onchange="editChan()">
-                   <output id="channel"></output>
-                 </div>
+               <table class="esps-table">
+                 <tr><td width="25%">F/W Magic</td><td><span id="ed_apm"></span></td></tr>
+                 <tr><td width="25%">F/W Version</td><td><span id="ed_apv"></span></td></tr>
+                 <tr><td width="25%">Channel</td><td><input type="range" min="1" max="512" id="s_chanid" oninput="this.nextElementSibling.value = this.value" onchange="editChan()">
+                    <output id="channel"></output></td></tr>
+               </table>
              </form>
           </div>
         </fieldset>
@@ -481,7 +474,7 @@
         <legend class="esps-legend">Frequency Scan</legend>
           <div id="s_view" class="tdiv">
             <div class="row">
-              <div class="col-sm-12"><canvas id="canvas2" width="440" height="300"></canvas></div>
+              <div class="col-sm-12"><canvas id="canvas2" style="width:440px; height:300px" width="440" height="300"></canvas></div>
             </div>
           </div>
       </fieldset>
