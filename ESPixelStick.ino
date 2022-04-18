@@ -39,7 +39,6 @@ const char passphrase[] = "";
 #include "FPPDiscovery.h"
 #include "EFUpdate.h"
 #include "wshandler.h"
-#include "gamma.h"
 
 extern "C" {
 #include <user_interface.h>
@@ -101,11 +100,7 @@ IPAddress           ourLocalIP;
 IPAddress           ourSubnetMask;
 
 // Output Drivers
-#if defined(ESPS_MODE_PIXEL)
-PixelDriver     out_driver;         // Pixel object
-#elif defined(ESPS_MODE_SERIAL)
-SerialDriver    out_driver;         // Serial object
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
 WnrfDriver      out_driver;
 #else
 #error "No valid output mode defined."
@@ -804,59 +799,7 @@ void validateConfig() {
     }
 #endif
 
-#if defined(ESPS_MODE_PIXEL)
-    // Set Mode
-    config.devmode = MODE_PIXEL;
-
-    // Generic channel limits for pixels
-    if (config.channel_count % 3)
-        config.channel_count = (config.channel_count / 3) * 3;
-
-    if (config.channel_count > PIXEL_LIMIT * 3)
-        config.channel_count = PIXEL_LIMIT * 3;
-    else if (config.channel_count < 1)
-        config.channel_count = 1;
-
-    if (config.groupSize > config.channel_count / 3)
-        config.groupSize = config.channel_count / 3;
-    else if (config.groupSize < 1)
-        config.groupSize = 1;
-
-    // GECE Limits
-    if (config.pixel_type == PixelType::GECE) {
-        config.pixel_color = PixelColor::RGB;
-        if (config.channel_count > 63 * 3)
-            config.channel_count = 63 * 3;
-    }
-
-    // Default gamma value
-    if (config.gammaVal <= 0) {
-        config.gammaVal = 2.2;
-    }
-
-    // Default brightness value
-    if (config.briteVal <= 0) {
-        config.briteVal = 1.0;
-    }
-#elif defined(ESPS_MODE_SERIAL)
-    // Set Mode
-    config.devmode = MODE_SERIAL;
-
-    // Generic serial channel limits
-    if (config.channel_count > RENARD_LIMIT)
-        config.channel_count = RENARD_LIMIT;
-    else if (config.channel_count < 1)
-        config.channel_count = 1;
-
-    if (config.serial_type == SerialType::DMX512 && config.channel_count > UNIVERSE_MAX)
-        config.channel_count = UNIVERSE_MAX;
-
-    // Baud rate check
-    if (config.baudrate > BaudRate::BR_460800)
-        config.baudrate = BaudRate::BR_460800;
-    else if (config.baudrate < BaudRate::BR_38400)
-        config.baudrate = BaudRate::BR_57600;
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
     // Set Mode
     config.devmode = MODE_NRF;
     if (config.nrf_legacy)
@@ -924,18 +867,7 @@ void updateConfig() {
     zcpp.stats.num_packets = 0;
 
     // Initialize for our pixel type
-#if defined(ESPS_MODE_PIXEL)
-    out_driver.begin(config.pixel_type, config.pixel_color, config.channel_count / 3);
-    out_driver.setGroup(config.groupSize, config.zigSize);
-    updateGammaTable(config.gammaVal, config.briteVal);
-    if (config.groupSize == 0) config.groupSize = 1;
-    effects.begin(&out_driver, config.channel_count / 3 / config.groupSize);
-
-#elif defined(ESPS_MODE_SERIAL)
-    out_driver.begin(&SEROUT_PORT, config.serial_type, config.channel_count, config.baudrate);
-    effects.begin(&out_driver, config.channel_count / 3 );
-
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
     out_driver.begin(config.nrf_baud, config.nrf_chan, config.channel_count);
     effects.begin(&out_driver, config.channel_count / 3 );
     register_nrf_callbacks(); // Allow NRF driver to send ASYNC responses to WEB client
@@ -1073,32 +1005,7 @@ void dsDeviceConfig(const JsonObject &json) {
     }
 #endif
 
-#if defined(ESPS_MODE_PIXEL)
-    // Pixel
-    if (json.containsKey("pixel")) {
-        config.pixel_type = PixelType(static_cast<uint8_t>(json["pixel"]["type"]));
-        config.pixel_color = PixelColor(static_cast<uint8_t>(json["pixel"]["color"]));
-        config.groupSize = json["pixel"]["groupSize"];
-        config.zigSize = json["pixel"]["zigSize"];
-        config.gammaVal = json["pixel"]["gammaVal"];
-        config.briteVal = json["pixel"]["briteVal"];
-    }
-    else
-    {
-        LOG_PORT.println("No pixel settings found.");
-    }
-
-#elif defined(ESPS_MODE_SERIAL)
-    // Serial
-    if (json.containsKey("serial")) {
-        config.serial_type = SerialType(static_cast<uint8_t>(json["serial"]["type"]));
-        config.baudrate = BaudRate(static_cast<uint32_t>(json["serial"]["baudrate"]));
-    }
-    else
-    {
-        LOG_PORT.println("No serial settings found.");
-    }
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
     if (json.containsKey("wnrf")) {
         config.nrf_legacy = (json["wnrf"]["enabled"]);
         if (config.nrf_legacy) {
@@ -1238,22 +1145,7 @@ void serializeConfig(String &jsonString, bool pretty, bool creds) {
     e131["channel_count"] = config.channel_count;
     e131["multicast"] = config.multicast;
 
-#if defined(ESPS_MODE_PIXEL)
-    // Pixel
-    JsonObject pixel = json.createNestedObject("pixel");
-    pixel["type"] = static_cast<uint8_t>(config.pixel_type);
-    pixel["color"] = static_cast<uint8_t>(config.pixel_color);
-    pixel["groupSize"] = config.groupSize;
-    pixel["zigSize"] = config.zigSize;
-    pixel["gammaVal"] = config.gammaVal;
-    pixel["briteVal"] = config.briteVal;
-
-#elif defined(ESPS_MODE_SERIAL)
-    // Serial
-    JsonObject serial = json.createNestedObject("serial");
-    serial["type"] = static_cast<uint8_t>(config.serial_type);
-    serial["baudrate"] = static_cast<uint32_t>(config.baudrate);
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
     JsonObject wnrf = json.createNestedObject("wnrf");
     wnrf["enabled"]  = config.nrf_legacy;
     wnrf["nrf_chan"] = static_cast<uint8_t>(config.nrf_chan);
@@ -1267,16 +1159,6 @@ void serializeConfig(String &jsonString, bool pretty, bool creds) {
     else
         serializeJson(json, jsonString);
 }
-
-#if defined(ESPS_MODE_PIXEL)
-void dsGammaConfig(const JsonObject &json) {
-    if (json.containsKey("pixel")) {
-        config.gammaVal = json["pixel"]["gammaVal"];
-        config.briteVal = json["pixel"]["briteVal"];
-        updateGammaTable(config.gammaVal, config.briteVal);
-    }
-}
-#endif
 
 // Save configuration JSON file
 void saveConfig() {
@@ -1322,72 +1204,9 @@ void sendZCPPConfig(ZCPP_packet_t& packet) {
     else {
         packet.QueryConfigurationResponse.ports = 1;
         packet.QueryConfigurationResponse.PortConfig[0].port = 0;
-        #if defined(ESPS_MODE_SERIAL)
-        packet.QueryConfigurationResponse.PortConfig[0].port |= 0x80;
-        #endif
         packet.QueryConfigurationResponse.PortConfig[0].string = 0;
         packet.QueryConfigurationResponse.PortConfig[0].startChannel = ntohl((uint32_t)config.channel_start);
-
-#if defined(ESPS_MODE_PIXEL)
-        switch(config.pixel_type) {
-          case  PixelType::WS2811:
-              packet.QueryConfigurationResponse.PortConfig[0].protocol = ZCPP_PROTOCOL_WS2811;
-              break;
-          case  PixelType::GECE:
-              packet.QueryConfigurationResponse.PortConfig[0].protocol = ZCPP_PROTOCOL_GECE;
-              break;
-        }
-
-#elif defined(ESPS_MODE_SERIAL)
-        switch(config.serial_type) {
-          case  SerialType::DMX512:
-              packet.QueryConfigurationResponse.PortConfig[0].protocol = ZCPP_PROTOCOL_DMX;
-              break;
-          case  SerialType::RENARD:
-              packet.QueryConfigurationResponse.PortConfig[0].protocol = ZCPP_PROTOCOL_RENARD;
-              break;
-        }
-
-#elif defined(ESPS_MODE_WNRF)
-       // Not sure what to put here for ZCPP protocol
-
-#endif
         packet.QueryConfigurationResponse.PortConfig[0].channels = ntohl((uint32_t)config.channel_count);
-
-#if defined(ESPS_MODE_PIXEL)
-        packet.QueryConfigurationResponse.PortConfig[0].grouping = config.groupSize;
-
-        switch(config.pixel_color) {
-          case PixelColor::RGB:
-              packet.QueryConfigurationResponse.PortConfig[0].directionColourOrder = ZCPP_COLOUR_ORDER_RGB;
-              break;
-          case PixelColor::RBG:
-              packet.QueryConfigurationResponse.PortConfig[0].directionColourOrder = ZCPP_COLOUR_ORDER_RBG;
-              break;
-          case PixelColor::GRB:
-              packet.QueryConfigurationResponse.PortConfig[0].directionColourOrder = ZCPP_COLOUR_ORDER_GRB;
-              break;
-          case PixelColor::GBR:
-              packet.QueryConfigurationResponse.PortConfig[0].directionColourOrder = ZCPP_COLOUR_ORDER_GBR;
-              break;
-          case PixelColor::BRG:
-              packet.QueryConfigurationResponse.PortConfig[0].directionColourOrder = ZCPP_COLOUR_ORDER_BRG;
-              break;
-          case PixelColor::BGR:
-              packet.QueryConfigurationResponse.PortConfig[0].directionColourOrder = ZCPP_COLOUR_ORDER_BGR;
-              break;
-        }
-
-        packet.QueryConfigurationResponse.PortConfig[0].brightness = config.briteVal * 100.0f;
-        packet.QueryConfigurationResponse.PortConfig[0].gamma = config.gammaVal * 10;
-#elif defined(ESPS_MODE_SERIAL)
-        packet.QueryConfigurationResponse.PortConfig[0].grouping = 0;
-        packet.QueryConfigurationResponse.PortConfig[0].directionColourOrder = 0;
-        packet.QueryConfigurationResponse.PortConfig[0].brightness = 100.0f;
-        packet.QueryConfigurationResponse.PortConfig[0].gamma = 0;
-#elif defined(ESPS_MODE_WNRF)
-        // Or here... 
-#endif
     }
 
     zcpp.sendConfigResponse(&packet);
@@ -1522,11 +1341,7 @@ void loop() {
                           int serialPorts = 0;
                           int pixelPorts = 0;
                           int wnrfPorts = 0;
-        #if defined(ESPS_MODE_PIXEL)
-                            pixelPorts = 1;
-        #elif defined(ESPS_MODE_SERIAL)
-                            serialPorts = 1;
-        #elif defined(ESPS_MODE_WNRF)
+        #if defined(ESPS_MODE_WNRF)
                             wnrfPorts = 1;
         #endif
                           char version[9];
@@ -1553,76 +1368,18 @@ void loop() {
                         for (int i = 0; i < zcppPacket.Configuration.ports; i++) {
                             if (p->port == 0) {
                                 switch(p->protocol) {
-#if defined(ESPS_MODE_PIXEL)
-                                    case ZCPP_PROTOCOL_WS2811:
-                                        config.pixel_type = PixelType::WS2811;
-                                        break;
-                                    case ZCPP_PROTOCOL_GECE:
-                                        config.pixel_type = PixelType::GECE;
-                                        break;
-#elif defined(ESPS_MODE_SERIAL)
-                                    case ZCPP_PROTOCOL_DMX:
-                                        config.serial_type = SerialType::DMX512;
-                                        break;
-                                    case ZCPP_PROTOCOL_RENARD:
-                                        config.serial_type = SerialType::RENARD;
-                                        break;
-#elif defined(ESPS_MODE_WNRF)
-#endif
                                     default:
                                         LOG_PORT.print("Attempt to configure invalid protocol ");
                                         LOG_PORT.print(p->protocol);
                                         break;
                                 }
                                 LOG_PORT.print("    Protocol: ");
-#if defined(ESPS_MODE_PIXEL)
-                                LOG_PORT.println((int)config.pixel_type);
-#elif defined(ESPS_MODE_SERIAL)
-                                LOG_PORT.println((int)config.serial_type);
-#endif
                                 config.channel_start = htonl(p->startChannel);
                                 LOG_PORT.print("    Start Channel: ");
                                 LOG_PORT.println(config.channel_start);
                                 config.channel_count = htonl(p->channels);
                                 LOG_PORT.print("    Channel Count: ");
                                 LOG_PORT.println(config.channel_count);
-#if defined(ESPS_MODE_PIXEL)
-                                config.groupSize = p->grouping;
-                                LOG_PORT.print("    Group Size: ");
-                                LOG_PORT.println(config.groupSize);
-                                switch(ZCPP_GetColourOrder(p->directionColourOrder)) {
-                                    case ZCPP_COLOUR_ORDER_RGB:
-                                      config.pixel_color = PixelColor::RGB;
-                                      break;
-                                    case ZCPP_COLOUR_ORDER_RBG:
-                                      config.pixel_color = PixelColor::RBG;
-                                      break;
-                                    case ZCPP_COLOUR_ORDER_GRB:
-                                      config.pixel_color = PixelColor::GRB;
-                                      break;
-                                    case ZCPP_COLOUR_ORDER_GBR:
-                                      config.pixel_color = PixelColor::GBR;
-                                      break;
-                                    case ZCPP_COLOUR_ORDER_BRG:
-                                      config.pixel_color = PixelColor::BRG;
-                                      break;
-                                    case ZCPP_COLOUR_ORDER_BGR:
-                                      config.pixel_color = PixelColor::BGR;
-                                      break;
-                                    default:
-                                      LOG_PORT.print("Attempt to configure invalid colour order ");
-                                      LOG_PORT.print(ZCPP_GetColourOrder(p->directionColourOrder));
-                                      break;
-                                }
-                                LOG_PORT.print("    Colour Order: ");
-                                LOG_PORT.println((int)config.pixel_color);
-                                config.briteVal = (float)p->brightness / 100.0f;
-                                LOG_PORT.print("    Brightness: ");
-                                LOG_PORT.println(config.briteVal);
-                                config.gammaVal = ZCPP_GetGamma(p->gamma);
-                                LOG_PORT.print("    Gamma: ");
-                                LOG_PORT.println(config.gammaVal);
-#endif
                             }
                             else {
                                 LOG_PORT.print("Attempt to configure invalid port ");

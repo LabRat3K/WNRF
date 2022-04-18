@@ -35,11 +35,7 @@ const char BUILD_DATE[] = __DATE__;
 #include <ESPAsyncE131.h>
 #include <ArduinoJson.h>
 
-#if defined(ESPS_MODE_PIXEL)
-#include "PixelDriver.h"
-#elif defined(ESPS_MODE_SERIAL)
-#include "SerialDriver.h"
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
 #include "WnrfDriver.h"
 #endif
 
@@ -47,12 +43,7 @@ const char BUILD_DATE[] = __DATE__;
 
 #define HTTP_PORT       80      /* Default web server port */
 #define MQTT_PORT       1883    /* Default MQTT port */
-#if defined(ESPS_MODE_PIXEL)
-    #define DATA_PIN        2   /* Pixel output - GPIO2 (D4 on NodeMCU) */
-#endif
 #define UNIVERSE_MAX    512     /* Max channels in a DMX Universe */
-#define PIXEL_LIMIT     1360    /* Total pixel limit - 40.85ms for 8 universes */
-#define RENARD_LIMIT    2048    /* Channel limit for serial outputs */
 #define E131_TIMEOUT    1000    /* Force refresh every second an E1.31 packet is not seen */
 #define CLIENT_TIMEOUT  15      /* In station/client mode try to connection for 15 seconds */
 #define AP_TIMEOUT      60      /* In AP mode, wait 60 seconds for a connection or reboot */
@@ -69,11 +60,8 @@ const char BUILD_DATE[] = __DATE__;
 // Configuration file params
 #define CONFIG_MAX_SIZE 4096    /* Sanity limit for config file */
 
-// Pixel Types
-#define MODE_PIXEL  (0x00)
-#define MODE_SERIAL (0x01)
-#define MODE_NRF    (0x02)
-
+// Serial and Pixel modes removed
+#define MODE_NRF  (0x02)
 // Data Source to use
 enum class DataSource : uint8_t {
     E131,
@@ -137,19 +125,7 @@ typedef struct {
     uint16_t    channel_count;  /* Number of channels */
     bool        multicast;      /* Enable multicast listener */
 
-#if defined(ESPS_MODE_PIXEL)
-    /* Pixels */
-    PixelType   pixel_type;     /* Pixel type */
-    PixelColor  pixel_color;    /* Pixel color order */
-    uint16_t    zigSize;	    /* Zigsize count - 0 = no zigzag */
-    uint16_t    groupSize;      /* Group size - 1 = no grouping */
-    float       gammaVal;       /* gamma value to use */
-    float       briteVal;       /* brightness lto use */
-#elif defined(ESPS_MODE_SERIAL)
-    /* Serial */
-    SerialType  serial_type;    /* Serial type */
-    BaudRate    baudrate;       /* Baudrate */
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
     NrfChan     nrf_chan;       /* Radio Frequency       */
     NrfBaud     nrf_baud;       /* Baudrate 250k/1Mb/2Mb */
     bool        nrf_legacy;     /* Support Early NRF designs (32 byte payload) */
@@ -162,7 +138,6 @@ void dsNetworkConfig(const JsonObject &json);
 void dsDeviceConfig(const JsonObject &json);
 void dsEffectConfig(const JsonObject &json);
 void saveConfig();
-void dsGammaConfig(const JsonObject &json);
 
 void connectWifi();
 void onWifiConnect(const WiFiEventStationModeGotIP &event);

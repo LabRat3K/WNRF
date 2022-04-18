@@ -5,11 +5,7 @@
 #define MAX_EFFECT_DELAY 65535
 #define DEFAULT_EFFECT_DELAY 1000
 
-#if defined(ESPS_MODE_PIXEL)
-    #define DRIVER PixelDriver
-#elif defined(ESPS_MODE_SERIAL)
-    #define DRIVER SerialDriver
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
     #define DRIVER WnrfDriver
 #endif
 

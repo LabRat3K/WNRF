@@ -20,13 +20,7 @@
 #ifndef WSHANDLER_H_
 #define WSHANDLER_H_
 
-#if defined(ESPS_MODE_PIXEL)
-#include "PixelDriver.h"
-extern PixelDriver  out_driver;     // Pixel object
-#elif defined(ESPS_MODE_SERIAL)
-#include "SerialDriver.h"
-extern SerialDriver out_driver;     // Serial object
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
 #include "WnrfDriver.h"
 extern WnrfDriver out_driver;       // Wnrf object
 #endif
@@ -57,7 +51,6 @@ AsyncWebSocketClient * ws_edit_client;
     G1 - Get Config
     G2 - Get Config Status
     G3 - Get Current Effect and Effect Config Options
-    G4 - Get Gamma table values
 
     T0 - Disable Testing
     T1 - Static Testing
@@ -80,7 +73,6 @@ AsyncWebSocketClient * ws_edit_client;
     S1 - Set Network Config
     S2 - Set Device Config
     S3 - Set Effect Startup Config
-    S4 - Set Gamma and Brightness (but dont save)
 
     XJ - Get RSSI,heap,uptime, e131 stats in json
 
@@ -163,37 +155,7 @@ void procE(uint8_t *data, AsyncWebSocketClient *client) {
             // Create buffer and root object
             DynamicJsonDocument json(1024);
 
-#if defined (ESPS_MODE_PIXEL)
-            // Pixel Types
-            JsonObject p_type = json.createNestedObject("p_type");
-            p_type["WS2811 800kHz"] = static_cast<uint8_t>(PixelType::WS2811);
-            p_type["GE Color Effects"] = static_cast<uint8_t>(PixelType::GECE);
-
-            // Pixel Colors
-            JsonObject p_color = json.createNestedObject("p_color");
-            p_color["RGB"] = static_cast<uint8_t>(PixelColor::RGB);
-            p_color["GRB"] = static_cast<uint8_t>(PixelColor::GRB);
-            p_color["BRG"] = static_cast<uint8_t>(PixelColor::BRG);
-            p_color["RBG"] = static_cast<uint8_t>(PixelColor::RBG);
-            p_color["GBR"] = static_cast<uint8_t>(PixelColor::GBR);
-            p_color["BGR"] = static_cast<uint8_t>(PixelColor::BGR);
-
-#elif defined (ESPS_MODE_SERIAL)
-            // Serial Protocols
-            JsonObject s_proto = json.createNestedObject("s_proto");
-            s_proto["DMX512"] = static_cast<uint8_t>(SerialType::DMX512);
-            s_proto["Renard"] = static_cast<uint8_t>(SerialType::RENARD);
-
-            // Serial Baudrates
-            JsonObject s_baud = json.createNestedObject("s_baud");
-            s_baud["38400"] = static_cast<uint32_t>(BaudRate::BR_38400);
-            s_baud["57600"] = static_cast<uint32_t>(BaudRate::BR_57600);
-            s_baud["115200"] = static_cast<uint32_t>(BaudRate::BR_115200);
-            s_baud["230400"] = static_cast<uint32_t>(BaudRate::BR_230400);
-            s_baud["250000"] = static_cast<uint32_t>(BaudRate::BR_250000);
-            s_baud["460800"] = static_cast<uint32_t>(BaudRate::BR_460800);
-
-#elif defined (ESPS_MODE_WNRF)
+#if defined (ESPS_MODE_WNRF)
             JsonObject nrf_baud = json.createNestedObject("nrf_baud");
             nrf_baud["1 Mbps"] = static_cast<uint8_t>(NrfBaud::BAUD_1Mbps);
             nrf_baud["2 Mbps"] = static_cast<uint8_t>(NrfBaud::BAUD_2Mbps);
@@ -442,19 +404,6 @@ void procG(uint8_t *data, AsyncWebSocketClient *client) {
 //LOG_PORT.print(response);
             break;
         }
-#if defined(ESPS_MODE_PIXEL)
-        case '4': {
-            DynamicJsonDocument json(1024);
-            JsonArray gamma = json.createNestedArray("gamma");
-            for (int i=0; i<256; i++) {
-                gamma.add(GAMMA_TABLE[i]);
-            }
-            String response;
-            serializeJson(json, response);
-            client->text("G4" + response);
-            break;
-        }
-#endif
     }
 }
 
@@ -496,12 +445,6 @@ void procS(uint8_t *data, AsyncWebSocketClient *client) {
             saveConfig();
             client->text("S3");
             break;
-#if defined(ESPS_MODE_PIXEL)
-        case '4':   // Set Gamma (but no save)
-            dsGammaConfig(json.as<JsonObject>());
-            client->text("S4");
-            break;
-#endif
     }
 }
 
@@ -568,14 +511,7 @@ void procT(uint8_t *data, AsyncWebSocketClient *client) {
 void procV(uint8_t *data, AsyncWebSocketClient *client) {
     switch (data[1]) {
         case '1': {  // View stream
-#if defined(ESPS_MODE_PIXEL)
-            client->binary(out_driver.getData(), config.channel_count);
-#elif defined(ESPS_MODE_SERIAL)
-            if (config.serial_type == SerialType::DMX512)
-                client->binary(&out_driver.getData()[1], config.channel_count);
-            else
-                client->binary(&out_driver.getData()[2], config.channel_count);
-#elif defined(ESPS_MODE_WNRF)
+#if defined(ESPS_MODE_WNRF)
             client->binary(out_driver.getData(), config.channel_count);
 #endif
             break;

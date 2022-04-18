@@ -1,7 +1,10 @@
 /*
 * Mode.h
 *
-* Project: ESPixelStick - An ESP8266 and E1.31 based pixel driver
+* Project: WNRF an E1.31 to NRF24L01 bridge
+* Copyright (c) 2022 Andrew Williams
+* http://www.ratsnest.ca
+* Based on ESPixelStick 
 * Copyright (c) 2018 Shelby Merrick
 * http://www.forkineye.com
 *
@@ -21,7 +24,6 @@
 #define MODE_H_
 
 /* Output Mode - There can be only one! (-Conor MacLeod) */
-//#define ESPS_MODE_PIXEL
-//#define ESPS_MODE_SERIAL
+// Note - for WNRF we have stripped out the MODE_SERIAL and MODE_PIXEL handlers
 #define ESPS_MODE_WNRF
 #endif  // MODE_H_

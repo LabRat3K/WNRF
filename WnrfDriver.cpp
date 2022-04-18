@@ -348,7 +348,6 @@ void WnrfDriver::sendDeviceList(void) {
             send_data = true;
          }
       }
-
       if (send_data) {
         if (nrf_async_devlist) {
            nrf_async_devlist(gdevice_list,gdevice_count);
