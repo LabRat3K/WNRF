@@ -1,6 +1,13 @@
 
 # Changelog
 
+### Fork to WNRF 1.0 based on ESPixelStick 3.2
+- New Functional reqiurement - act as a bridge between E1.31 and NRF24L01 RF clients.
+- Updated UI to allow for nRF configuration, and client administration.
+- Added F/W upload capability to send F/W image to client devices
+- Added a Frequency Scanner HTML pane, to aid with Frequency Selection
+
+
 ### 3.2
 
 - Compiled against [2.7.4 Arduino Core](https://github.com/esp8266/Arduino/releases/tag/2.7.4)

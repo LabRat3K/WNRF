@@ -1,4 +1,7 @@
-# ESPixelStick Firmware
+# WNRF Firmware - based on ESPixelStick Firmware
+
+WNRF - a WiFi to nRF24L01 Gateway
+
 
 [![Join the chat at https://gitter.im/forkineye/ESPixelStick](https://badges.gitter.im/forkineye/ESPixelStick.svg)](https://gitter.im/forkineye/ESPixelStick)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://paypal.me/ShelbyMerrick)
