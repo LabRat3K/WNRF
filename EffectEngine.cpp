@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include "ESPixelStick.h"
+#include "WNRF.h"
 #include "EffectEngine.h"
 
 extern  config_t        config;

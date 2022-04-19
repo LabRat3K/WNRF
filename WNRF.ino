@@ -1,6 +1,10 @@
 /*
-  ESPixelStick.ino
+  WNRF.ino
 
+  Project: WNRF - An ESP8266, E1.31, and NRF24L01  based pixel driver
+  Copyright (c) 2022 Andrew Williams
+  http://www.ratsnest.ca
+  Based on..
   Project: ESPixelStick - An ESP8266 and E1.31 based pixel driver
   Copyright (c) 2016 Shelby Merrick
   http://www.forkineye.com
@@ -35,7 +39,7 @@ const char passphrase[] = "";
 #include "ESPAsyncDDP.h"
 #include <Hash.h>
 #include <SPI.h>
-#include "ESPixelStick.h"
+#include "WNRF.h"
 #include "FPPDiscovery.h"
 #include "EFUpdate.h"
 #include "wshandler.h"

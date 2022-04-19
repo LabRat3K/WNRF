@@ -60,7 +60,7 @@ gulp.task('clean', function() {
 gulp.task('md', function(done) {
     gulp.src('README.md')
         .pipe(plumber())
-        .pipe(rename('ESPixelStick.html'))
+        .pipe(rename('WNRF.html'))
         .pipe(markdown())
         .pipe(gulp.dest('dist'));
     gulp.src('Changelog.md')

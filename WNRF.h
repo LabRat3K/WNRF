@@ -1,6 +1,8 @@
 /*
-* ESPixelStick.h
+* WNRF.h
 *
+* Project: WNRF - An ESP8266, E1.31, and NRF24L01  based pixel driver
+* Based on...
 * Project: ESPixelStick - An ESP8266 and E1.31 based pixel driver
 * Copyright (c) 2016 Shelby Merrick
 * http://www.forkineye.com
@@ -17,10 +19,10 @@
 *
 */
 
-#ifndef ESPIXELSTICK_H_
-#define ESPIXELSTICK_H_
+#ifndef WNRF_H_
+#define WNRF_H_
 
-const char VERSION[] = "0.1";
+const char VERSION[] = "0.2";
 const char BUILD_DATE[] = __DATE__;
 
 // Mode configuration moved to Mode.h to ease things with Travis
