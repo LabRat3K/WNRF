@@ -366,6 +366,8 @@ function setNewChan(data) {
        footermsg("WNRF: Failure to set new channel address");
     } else {
        // Search the table looking for the device that matches
+       // Need to update the DATA vs the HTML table, as a redraw
+       // will pull from the DATA. 
        var devindex =-1;
        for (var i=0;i<devices.length;i++) {
           if (devices[i].dev_id == admin.dev_id)  {
@@ -380,6 +382,7 @@ function setNewChan(data) {
           devices[devindex].start = $('#s_chanid').val();
        }
        showDevices();
+
     }
     $('#update').modal('hide');
 }
@@ -674,7 +677,7 @@ function showDevices() {
 }
 
 function auditDevices() { // a 5 second periodic
-    // Walk the list.. decrement the audit counter anymore more than nn seconds - remove
+    // Walk the list.. decrement the audit counter, any more more than nn seconds - remove
     for (var i=0;i<devices.length;i++) {
        devices[i].audit--;
        if (devices[i].audit==0) {
@@ -698,10 +701,13 @@ function getDevices(data) {
                         blv:   devlist[i].blv,
                         apm:   devlist[i].apm,
                         apv:   devlist[i].apv,
-                        start: devlist[i].start,
+                        start: devlist[i].start+1,
                         audit: 6});
         } else {
            devices[index].audit=6; // Renew it's lease
+           devices[index].apm = devlist[i].apm;
+           devices[index].apv = devlist[i].apv;
+           devices[index].start = devlist[i].start+1;
         }
     }
 }

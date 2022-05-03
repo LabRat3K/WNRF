@@ -830,12 +830,11 @@ int WnrfDriver::nrf_rfchan_update(tDevId devId, uint8_t chanId, void * context) 
 int WnrfDriver::nrf_startaddr_update(tDevId devId, uint16_t start, void * context) {
   int retCode = -1;
   // Check we can access the file?
-  if (start<512){
-
+  if (start<=512){
       // Send the BIND and enter wait for BIND timeout
       int pipe = nrf_bind(devId, BIND_START, context);
       if (pipe>=0) {
-         gPipes[pipe].e131_start = start;
+         gPipes[pipe].e131_start = start-1; // NOTE: Channel 1-512, stored as 0-511
 
         retCode = 0;
       } else {
@@ -1009,7 +1008,11 @@ void WnrfDriver::checkRx() {
                       break;
 
                    case BIND_START:
-                      Serial.println("TIMEOUT waiting for START ADDRES ACK");
+                      Serial.println("TIMEOUT waiting for START ADDRESS ACK");
+                      // Attempt to recover device - tell it to reset using P2P
+                      // Hail Mary as PIPE needs to match - but as we aren't using
+                      // concurrent PIPES yet.. this should work
+                      tx_reset(i);
                       nrf_async_startaddr(pid->txaddr,pid->context, -1);
                       break;
 
@@ -1051,6 +1054,10 @@ void WnrfDriver::checkRx() {
                    case NRF_CTL_W4_AUDIT_ACK:
                       Serial.println("Re-Audit request");
                       tx_audit(i);
+                      break;
+                   case NRF_CTL_W4_CHAN_ACK:
+                      Serial.println("Re-send set-chan request");
+                      sendGenericCmd(i, 0x01 /* cmd */, pid->e131_start);
                       break;
                    default:
                       Serial.println("Nothing Pending Timeout");
