@@ -1024,7 +1024,10 @@ void dsDeviceConfig(const JsonObject &json) {
     }
     else
     {
-        LOG_PORT.println("No WNRF settings found.");
+        LOG_PORT.println("WNRF defaulted to: CHAN 82, 2Mbps.");
+	config.nrf_chan = NrfChan::NRFCHAN_G;
+	config.nrf_baud = NrfBaud::BAUD_2Mbps;
+	config.channel_count = 512;
     }
 #endif
 }
