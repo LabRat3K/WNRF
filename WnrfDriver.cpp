@@ -65,6 +65,7 @@
 // Application related states
 #define NRF_CTL_W4_CHAN_ACK   (0x06)
 #define NRF_CTL_W4_DEVID_ACK  (0x07)
+#define NRF_CTL_W4_RF_ACK     (0x08)
 
 
 
@@ -159,11 +160,9 @@ int WnrfDriver::begin() {
 
 // E1.31 addresses (Legacy and New)
 byte addr_legacy[] = {0x81, 0xF0, 0xF0, 0xF0, 0xF0};
-//byte addr_wnrf_bcast[] = {0xde,0xfa,0xda};
-uint32_t addr_wnrf_bcast = 0xDAFADE;
+uint32_t addr_wnrf_bcast = 0xC0DE42;
 
 // Address of the WNRF server
-//byte addr_wnrf_ctrl[]  = {0xC1,0xDE,0xC0}; // Was LEDCTL (1EDC71)
 uint32_t addr_wnrf_ctrl = 0xC0DEC1;
 
 int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
@@ -352,6 +351,9 @@ void WnrfDriver::sendDeviceList(void) {
         if (nrf_async_devlist) {
            nrf_async_devlist(gdevice_list,gdevice_count);
            gbeacon_client_response_timeout = millis();
+           Serial.print("Sending list of ");
+           Serial.print(gdevice_count);
+           Serial.println(" devices.");
         }
         gdevice_count = 0;
       }
@@ -477,10 +479,15 @@ void  WnrfDriver::rx_ackbind(uint8_t pipe) {
        case BIND_START:
           // Send the "New Device Id" message
           // Change state to W4_START ACK
+          sendGenericCmd(pipe, 0x01 /* cmd */, pid->e131_start);
+          pid->state = NRF_CTL_W4_CHAN_ACK;
+
           break;
        case BIND_RFCHAN:
           // Send the "New Device Id" message
-          // Change state to W4_START ACK
+          // Change state to W4_RF ACK
+          sendGenericCmd(pipe, 0x02 /* cmd */, pid->rf_chan);
+          pid->state = NRF_CTL_W4_RF_ACK;
           break;
        default:
           {
@@ -693,7 +700,7 @@ bool WnrfDriver::tx_bind(uint8_t pipe) {
 
    Serial.print("MSG:");
    for (int i=0;i<6;i++) {
-      Serial.print(msg[0],HEX);
+      Serial.print(msg[i],HEX);
    }
    Serial.println(".");
 
@@ -759,8 +766,8 @@ bool WnrfDriver::sendGenericCmd(uint8_t pipe, uint8_t cmd, uint16_t value) {
    radio.openWritingPipe(pid->txaddr);
    radio.setAutoAck(0,true);// P2P uses AA on the receiver
    tempPacket[0] = cmd;
-   tempPacket[1] = value>>8;
-   tempPacket[2] = value&0xFF;
+   tempPacket[1] = value&0xFF;
+   tempPacket[2] = value>>8;
    retCode = radio.write(tempPacket,32);
    radio.setAutoAck(0,false);
    radio.startListening();
@@ -813,10 +820,7 @@ int WnrfDriver::nrf_rfchan_update(tDevId devId, uint8_t chanId, void * context) 
       int pipe = nrf_bind(devId, BIND_RFCHAN, context);
       if (pipe>=0) {
          gPipes[pipe].rf_chan = chanId;
-// Move to the rx_ackbind callback
-         if(sendGenericCmd(pipe, 0x02 /* cmd */, chanId<<8)){
-            retCode = 0;
-         }
+         retCode = 0;
       } else {
         retCode = -1;
       }
@@ -833,9 +837,7 @@ int WnrfDriver::nrf_startaddr_update(tDevId devId, uint16_t start, void * contex
       if (pipe>=0) {
          gPipes[pipe].e131_start = start;
 
-         if(sendGenericCmd(pipe, 0x01 /* cmd */, start)){
-            retCode = 0;
-         }
+        retCode = 0;
       } else {
         retCode = -1;
       }
@@ -905,6 +907,7 @@ void WnrfDriver::checkRx() {
           pipe -=2;  //Index into gPipes array
 
           tPipeInfo * pid = &(gPipes[pipe]);
+          boolean check_beacon = false;
 
           // Deal with it
           switch (pid->state) {
@@ -947,6 +950,19 @@ void WnrfDriver::checkRx() {
                if (payload[0] == 0x83) {
                  rx_ackaudit(pipe,(bool) payload[1]);
                }
+               check_beacon = true;
+               break;
+             case NRF_CTL_W4_CHAN_ACK:
+               // To Do .. add some error handling here..
+               Serial.print("Receive CHAN_ACK : (");
+               Serial.print(pipe+2);
+               Serial.print("):");
+               Serial.println(payload[1]);
+               if (nrf_async_startaddr)
+                 nrf_async_startaddr(pid->txaddr,pid->context, payload[1]);
+               pid->state = NRF_CTL_NONE;
+               pid->context = NULL;
+               check_beacon = true;
                break;
              case NRF_CTL_NONE: // Do nothing - warn the console?
              default:
@@ -959,8 +975,15 @@ void WnrfDriver::checkRx() {
                  Serial.print(hex);
                }
                Serial.println(".");
+               check_beacon = true;
                break;
           } // End Switch STATE
+
+          if (check_beacon) {
+ 	    if (gadmin==true) { // In Admin and at least 1 pipe available
+               gbeacon_active = true;
+            }
+           }
        } // Pipe 2-5
     } // End handling of radio packet
 
@@ -973,11 +996,38 @@ void WnrfDriver::checkRx() {
           num_waiting--;
           if (now - pid->waitTime > 1000) {
              if (pid->waitCount>10) {
-                Serial.println("TIMEOUT waiting for ACK");
                 // >10 second failure to ACK - drop the attempt
-                nrf_async_otaflash(pid->txaddr,pid->context, -1);
+                switch(pid->bind_reason) {
+                   case BIND_FLASH:
+                      Serial.println("TIMEOUT waiting for ACK");
+                      nrf_async_otaflash(pid->txaddr,pid->context, -1);
+                      break;
+
+                   case BIND_DEVID:
+                      Serial.println("TIMEOUT waiting for DEVICE ID ACK");
+                      nrf_async_devid(pid->txaddr,pid->context, -1);
+                      break;
+
+                   case BIND_START:
+                      Serial.println("TIMEOUT waiting for START ADDRES ACK");
+                      nrf_async_startaddr(pid->txaddr,pid->context, -1);
+                      break;
+
+                   case BIND_RFCHAN:
+                      Serial.println("TIMEOUT waiting for START ADDRES ACK");
+                      nrf_async_rfchan(pid->txaddr,pid->context, -1);
+                      break;
+
+                   case BIND_NONE:
+                   default:
+                      Serial.println("Race condition, nothing to worry about");
+                      break;
+                }
                 pid->state = NRF_CTL_NONE;
                 pid->context = NULL;
+ 		if (gadmin==true) { // In Admin and at least 1 pipe available
+                   gbeacon_active = true;
+                }
              } else {
                 pid->waitTime = now;
                 pid->waitCount++;
@@ -1013,6 +1063,7 @@ void WnrfDriver::checkRx() {
 
     // Timeout handler can re-enable
     if (num_waiting==0) {
+       // Turn off beacon if no P2P channels available
        gbeacon_active = false;
     }
     //  If in ADMIN mode - Timeouts

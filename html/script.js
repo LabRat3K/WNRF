@@ -358,6 +358,32 @@ function wifiValidation() {
     $('#btn_wifi').prop('disabled', WifiSaveDisabled);
 }
 
+function setNewChan(data) {
+    var admin = JSON.parse(data);
+
+    if (admin.result != 1) {
+       admin_ctl=false;
+       footermsg("WNRF: Failure to set new channel address");
+    } else {
+       // Search the table looking for the device that matches
+       var devindex =-1;
+       for (var i=0;i<devices.length;i++) {
+          if (devices[i].dev_id == admin.dev_id)  {
+             devindex=i;
+             break;
+          }
+       }
+
+       if (devindex==-1) {
+         footermsg('Timeout or error from Device: re-check result');
+       } else {
+          devices[devindex].start = $('#s_chanid').val();
+       }
+       showDevices();
+    }
+    $('#update').modal('hide');
+}
+
 // Page event feeds
 function feed() {
     if ($('#home').is(':visible')) {
@@ -748,8 +774,7 @@ function editDevice(devid) {
         return;
      }
 
-    // Update by deleting everything and then adding again
-    // start at 1 to leave the table header
+    // Search the table looking for the device that matches
     var devindex =-1;
     for (var i=0;i<devices.length;i++) {
        if (devices[i].dev_id == devid)  {
@@ -802,12 +827,11 @@ function editDevice(devid) {
 
 function editChan() {
     var json = {
-            'device': {
-                'devid': $('#ed_devid').text(),
-                'chan' : $('#s_chanid').val()
-            }
+           'devid': $('#ed_devid').text(),
+           'chan' : $('#s_chanid').val()
         };
-    wsEnqueue('D2' + JSON.stringify(json));
+    $('#update').modal();
+    wsEnqueue('D2' + JSON.stringify(json))
 }
 
 function doneEdit() {

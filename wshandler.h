@@ -44,6 +44,7 @@ AsyncWebSocketClient * ws_edit_client;
 
 // Forward Declaration - code clean-up to fix
   void cb_flash (tDevId id, void * context, int result);
+  void cb_startaddr(tDevId id, void * context, int result);
 /*
   Packet Commands
     E1 - Get Elements
@@ -299,8 +300,26 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
         case '1':
             LOG_PORT.println(F("(D1) Device Refresh Request**"));
             break;
-        case '2':
-            LOG_PORT.println(F("(D2) CHANNEL update request**"));
+        case '2': {
+               LOG_PORT.println(F("(D2) CHANNEL update request**"));
+               tDevId tempid=0;
+               int retcode = 0;
+
+               if (ws_edit_client == client) {
+                  if (params.containsKey("devid")) {
+                     tempid = txt2id(params["devid"].as<const char*>());
+		     uint16_t newChan =   params["chan"];
+                     int retcode = out_driver.nrf_startaddr_update(tempid, newChan, client);
+                     if (retcode) {
+                        cb_startaddr(tempid, client, retcode);
+                     }
+                  } else {
+                    LOG_PORT.println(F("(D2) No DEVID in request"));
+                  }
+                } else {
+                    LOG_PORT.println(F("(D2) Invalid EDIT OWNER"));
+                }
+            }
             break;
         case '4': {
                tDevId tempid=0;
@@ -721,7 +740,21 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
   // response to MTC: Update E1.31 Channel request
   void cb_startaddr(tDevId id, void * context, int result) {
+     char tempid[8];
 
+     id2txt(tempid,id);
+     DynamicJsonDocument json(1024);
+     JsonObject updchan = json.createNestedObject("updchan");
+       updchan["result"] = result;
+       updchan["dev_id"] = tempid;
+
+     String message;
+     serializeJson(updchan, message);
+     if (context) {
+        ((AsyncWebSocketClient *) context)->text("D2" + message);
+     } else {
+       LOG_PORT.println("** MISSING CONTEXT *** !!");
+     }
   }
 
 
