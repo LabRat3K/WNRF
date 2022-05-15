@@ -2,7 +2,7 @@
 
 WNRF - a WiFi to nRF24L01 Gateway
 
-[![WNRF Development Devices](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/enclosure_1.jpg)
+![WNRF Development Devices](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/enclosure_1.jpg)
 
 This is the Arduino firmware for the ESP8266 based Wifi-to-nRF bridge (based on the ESPixelStick).  The bridge acts to convert wireless E1.31 sACN payloads to nRF packets. The gateway can handle a full 512 universe, with options to support multiple WNRF gateways in the same installation (different frequencies).
 
@@ -54,53 +54,14 @@ The ESPixelStick firmware can generate the following outputs from incoming E1.31
 
 - None - stripped to reduce firmware footprint
 
-## MQTT Support
+## Screen Shots
 
-MQTT can be configured via the web interface.  When enabled, a payload of "ON" will tell the ESPixelStick to override any incoming E1.31 data with MQTT data.  When a payload of "OFF" is received, E1.31 processing will resume.  The configured topic is used for state, and the command topic will be the state topic appended with ```/set```.
-
-For example, if you enter ```porch/esps``` as the topic, the state can be queried from ```porch/esps``` and commands can be sent to ```porch/esps/set```
-
-If using [Home Assistant](https://home-assistant.io/), it is recommended to enable Home Assistant Discovery in the MQTT configuration.  Your ESPixelStick along with all effects will be automatically imported as an entity within Home Assistant utilzing "Device ID" as the friendly name.  For manual configuration, you can use the following as an example.  When disabling Home Assistant Discovery, ESPixelStick will attempt to remove its configuration entry from your MQTTT broker.
-
-```yaml
-light:
-  - platform: mqtt
-    schema: json
-    name: "Front Porch ESPixelStick"
-    state_topic: "porch/esps"
-    command_topic: "porch/esps/set"
-    brightness: true
-    rgb: true
-    effect: true
-    effect_list:
-      - Solid
-      - Blink
-      - Flash
-      - Rainbow
-      - Chase
-      - Fire flicker
-      - Lightning
-      - Breathe
-```
-
-Here's an example using the mosquitto_pub command line tool:
-
-```bash
-mosquitto_pub -t porch/esps/set -m '{"state":"ON","color":{"r":255,"g":128,"b":64},"brightness":255,"effect":"solid","reverse":false,"mirror":false}'
-```
-
-## Resources
-
-- Firmware: [http://github.com/forkineye/ESPixelStick](http://github.com/forkineye/ESPixelStick)
-- Hardware: [http://forkineye.com/ESPixelStick](http://forkineye.com/ESPixelStick)
+![WNRF Status Page](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/screenshots/Slide2.PNG)
+![nRF Default Config](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/screenshots/Slide3.PNG)
+![WNRF Client Device Admin](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/screenshots/Slide6.PNG)
+![Client Over the Air Update](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/screenshots/Slide5.PNG)
+![WNRF Frequency Scanner](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/screenshots/Slide4.PNG)
 
 ## Credits
 
-- The great people at [diychristmas.org](http://diychristmas.org) and [doityourselfchristmas.com](http://doityourselfchristmas.com) for inspiration and support.
-- [Bill Porter](https://github.com/madsci1016) for initial Renard and SoftAP support.
-- Bill Porter and [Grayson Lough](https://github.com/GraysonLough) for initial DMX support.
-- [Rich Danby](https://github.com/cinoan) for fixes and helping polish the front-end.
-- [penfold42](https://github.com/penfold42) for fixes, brightness, gamma support, and zig-zag / grouping.
-  - penfold42 also maintains PWM support in their fork located [here](https://github.com/penfold42/ESPixelBoard).
-- [Austin Hodges](https://github.com/ahodges9) for effects support and MQTT cleanup.
-- [Matthias C. Hormann](https://github.com/Moonbase59) — some MQTT & effects cleanup.
+- The ESPixelStick project: [http://github.com/forkineye/ESPixelStick](http://github.com/forkineye/ESPixelStick)
