@@ -2,12 +2,7 @@
 
 WNRF - a WiFi to nRF24L01 Gateway
 
-
-[![Join the chat at https://gitter.im/forkineye/ESPixelStick](https://badges.gitter.im/forkineye/ESPixelStick.svg)](https://gitter.im/forkineye/ESPixelStick)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://paypal.me/ShelbyMerrick)
-[![Build Status](https://travis-ci.org/forkineye/ESPixelStick.svg?branch=master)](https://travis-ci.org/forkineye/ESPixelStick)
-
-[[/images/enclosure_1.jpg|WNRF dev devices]]
+[![WNRF Development Devices](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/enclosure_1.jpg)
 
 This is the Arduino firmware for the ESP8266 based Wifi-to-nRF bridge (based on the ESPixelStick).  The bridge acts to convert wireless E1.31 sACN payloads to nRF packets. The gateway can handle a full 512 universe, with options to support multiple WNRF gateways in the same installation (different frequencies).
 
