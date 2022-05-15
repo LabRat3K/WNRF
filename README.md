@@ -12,12 +12,14 @@ To keep things simple, many of the advances streaming options of the ESPixelStic
 
 The WNRF hardware combines an ESP-07 (or 12) with a nRF24L01 radio, to create the WNRF device. The footprint was designed to go into the Hammon 1593K enclosure, in order to create a nice tidy (and inexpensive) end product. Any nRF24L01 radio using the two row 8-pin header, should work, but I would recommend selecing one with PA+LNA capabilities. An external antenna is preferable, to maximise your outgoing signal capabilities.
 
+![WNRF PCB](https://github.com/LabRat3K/WNRF/blob/master/wiki/images/WNRF_LED_SUMMARY.png)
+
 ## Requirements
 
 This section is direct from the ESPixelStick project. 
 Along with the Arduino IDE, you'll need the following software to build this project:
 
-- [Adruino for ESP8266](https://github.com/esp8266/Arduino) - Arduino core for ESP8266
+- [Arduino for ESP8266](https://github.com/esp8266/Arduino) - Arduino core for ESP8266
 - [Arduino ESP8266 Filesystem Uploader](https://github.com/esp8266/arduino-esp8266fs-plugin) - Arduino plugin for uploading files to SPIFFS
 - [gulp](http://gulpjs.com/) - Build system required to process web sources.  Refer to the html [README](html/README.md) for more information.
 
