@@ -63,7 +63,7 @@ typedef struct sPipeState {
             uint16_t csum;  // Checksum over the entire upload space
          } fw;
          uint16_t e131_start;
-         tDevId newId;
+         tDevId newid;
          uint8_t  rf_chan;
         };
   // CallBack context to the UI session
@@ -113,7 +113,7 @@ class WnrfDriver {
     int  nrf_bind            (tDevId devId, uint8_t reason, void * context);
     int  nrf_flash           (tDevId devId, char *fname, void * context);
     int  nrf_rfchan_update   (tDevId devId, uint8_t chan,  void * context);
-    int  nrf_devid_update    (tDevId devId, tDevId newId,void * context);
+    int  nrf_devid_update    (tDevId devId, tDevId newid,void * context);
     int  nrf_startaddr_update(tDevId devId, uint16_t start, void * context);
 
     // Async Functions - callback context
@@ -124,7 +124,7 @@ class WnrfDriver {
     async_startaddr_handler nrf_async_startaddr;
     async_devlist_handler   nrf_async_devlist;
 
-    void sendNewDevId (tDevId  devId, tDevId  newId);
+    void sendNewDevId (tDevId  devId, tDevId  newid);
     void sendNewRFChan(tDevId  devId, uint8_t  chanId);
 
     int  clearContext(void * context);
@@ -189,6 +189,7 @@ class WnrfDriver {
     bool tx_commit(uint8_t pipe);
     bool tx_audit(uint8_t pipe);
     bool tx_reset(uint8_t pipe);
+    bool tx_newid(uint8_t pipe,tDevId newid);
 
     void rx_ackbind(uint8_t pipe);
     void rx_acksetup(uint8_t pipe);

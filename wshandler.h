@@ -45,6 +45,7 @@ AsyncWebSocketClient * ws_edit_client;
 // Forward Declaration - code clean-up to fix
   void cb_flash (tDevId id, void * context, int result);
   void cb_startaddr(tDevId id, void * context, int result);
+  void cb_devid (tDevId id, void * context, int result);
 /*
   Packet Commands
     E1 - Get Elements
@@ -69,6 +70,8 @@ AsyncWebSocketClient * ws_edit_client;
     D1 - List of NRF client devices
     D2 - Update Channel Request
     D3 - WS File Upload Return Code
+    D4 - OTA flash return code
+    D5 - Admin - change device id 
     Da/A - enable.disable Device Admin
 
     S1 - Set Network Config
@@ -299,6 +302,7 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
            break; // Turn on the Streaming Output
         case '1':
             LOG_PORT.println(F("(D1) Device Refresh Request**"));
+            // Currently ignored
             break;
         case '2': {
                LOG_PORT.println(F("(D2) CHANNEL update request**"));
@@ -339,6 +343,38 @@ void procD(uint8_t *data, AsyncWebSocketClient *client) {
                } else {
                   cb_flash(tempid,client, -11);
                }
+            }
+            break;
+        case '5': {
+               LOG_PORT.println(F("(D5) Device Id update request**"));
+               tDevId tempid=0;
+               int retcode = 0;
+
+               if (ws_edit_client == client) {
+                  if (params.containsKey("devid")) {
+                     tempid = txt2id(params["devid"].as<const char*>());
+                     if (params.containsKey("newid")) {
+                        tDevId newid= txt2id(params["newid"].as<const char*>());
+                        Serial.print("NEWID: From:");
+                        Serial.print(tempid,HEX);
+                        Serial.print(" to ");
+                        Serial.println(newid,HEX);
+		
+                        int retcode = out_driver.nrf_devid_update(tempid, newid, client);
+                        if (retcode) {
+                           cb_devid(tempid, client, retcode);
+                        }
+                      }
+                      else {
+                         LOG_PORT.println(F("(D5) No NEWID in request"));
+                         cb_devid(tempid, client, -51);
+                      }
+                  } else {
+                    LOG_PORT.println(F("(D5) No DEVID in request"));
+                  }
+                } else {
+                    LOG_PORT.println(F("(D5) Invalid EDIT OWNER"));
+                }
             }
             break;
         default : // Do Nothing
@@ -736,6 +772,21 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   void cb_devid (tDevId id, void * context, int result) {
      // If result is ok..
      // Convert context into a client and send "D5" result
+     char tempid[8];
+
+     id2txt(tempid,id);
+     DynamicJsonDocument json(1024);
+     JsonObject upddevid = json.createNestedObject("newdevid");
+       upddevid["result"] = result;
+       upddevid["dev_id"] = tempid;
+
+     String message;
+     serializeJson(upddevid, message);
+     if (context) {
+        ((AsyncWebSocketClient *) context)->text("D5" + message);
+     } else {
+       LOG_PORT.println("** (D5) MISSING CONTEXT *** !!");
+     }
   }
 
   // response to MTC: Update E1.31 Channel request
@@ -753,7 +804,7 @@ void wsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
      if (context) {
         ((AsyncWebSocketClient *) context)->text("D2" + message);
      } else {
-       LOG_PORT.println("** MISSING CONTEXT *** !!");
+       LOG_PORT.println("** (D2) MISSING CONTEXT *** !!");
      }
   }
 

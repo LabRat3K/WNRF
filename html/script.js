@@ -65,6 +65,25 @@ $(function() {
  // see it's status?
           });
 
+        $('#newid').change(function() {
+           var regexp = new RegExp(/^[0-9A-F]{6}$/i);
+           if (!regexp.test($('#newid').val()))  {
+              alert('Invalid DeviceId: '+$('#newid').val());
+           } else {
+              if (window.confirm("Confirm change to deviceID?")) {
+                 var json = {
+                    'devid': $('#ed_devid').text(),
+                    'newid': $('#newid').val()
+                     };
+                 $('#update').modal();
+                 wsEnqueue('D5' + JSON.stringify(json))
+              } else {
+                // Restore the device id
+                $('#newid').val($('#ed_devid').text());
+              }
+           }
+          });
+
         // Color Picker
         $('.color').colorPicker({
             buildCallback: function($elm) {
@@ -358,7 +377,28 @@ function wifiValidation() {
     $('#btn_wifi').prop('disabled', WifiSaveDisabled);
 }
 
-function setNewChan(data) {
+function rxNewidReply(data) {
+    var admin = JSON.parse(data);
+
+    if (admin.result != 1) {
+       admin_ctl=false;
+       footermsg("WNRF: Failure to set new device address");
+    } else {
+       // Search for a match and delete it. 
+       // Table will be repopulated on next BEACON update
+       var devindex =-1;
+       for (var i=0;i<devices.length;i++) {
+          if (devices[i].dev_id == admin.dev_id)  {
+             table.deleteRow(i);
+             break;
+          }
+       }
+       showDevices();
+    }
+    $('#update').modal('hide');
+}
+
+function rxNewChanReply(data) {
     var admin = JSON.parse(data);
 
     if (admin.result != 1) {
@@ -454,13 +494,16 @@ function wsConnect() {
                     getDevices(data);
                     break;
                 case 'D2':
-                    setNewChan(data);
+                    rxNewChanReply(data);
                     break;
                 case 'D3':
                     rxWnrfuReply(data);
                     break;
                 case 'D4':
                     rxOTAReply(data);
+                    break;
+                case 'D5':
+                    rxNewidReply(data);
                     break;
                 case 'S1':
                     setConfig(data);
@@ -812,6 +855,8 @@ function editDevice(devid) {
 
      $('#s_chanid').val(device.start); // The RANGE slider
      $('#channel').val(device.start);  // The RANGE output
+
+     $('#newid').val(device.dev_id); // Device Id
 
      // Enable AP editing if AP version is not 0xFF
      if (device.apv != 0xFF) {

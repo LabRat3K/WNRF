@@ -474,7 +474,9 @@ void  WnrfDriver::rx_ackbind(uint8_t pipe) {
           break;
        case BIND_DEVID:
           // Send the "New Device Id" message
-          // Change state to W4_DEV ACK
+          // Change state to W4_DEVID ACK
+          tx_newid(pipe,pid->newid);
+          pid->state = NRF_CTL_W4_DEVID_ACK;
           break;
        case BIND_START:
           // Send the "New Device Id" message
@@ -751,6 +753,30 @@ int WnrfDriver::nrf_bind(tDevId devId, uint8_t reason, void * context) {
    return pipe;
 }
 
+bool WnrfDriver::tx_newid(uint8_t pipe, tDevId newid) {
+   tPipeInfo * pid = &(gPipes[pipe]);
+   byte tempPacket[32];
+   bool retCode = false;
+
+   Serial.print("Sending NEWID: ");
+   Serial.print(newid,HEX);
+   Serial.print(" to (");
+   Serial.print(pipe);
+   Serial.println(")");
+
+   radio.stopListening();
+   radio.openWritingPipe(pid->txaddr);
+   radio.setAutoAck(0,true);// P2P uses AA on the receiver
+   tempPacket[0] = 0x03;
+   tempPacket[1] = newid&0xFF;
+   tempPacket[2] = newid>>8&0xFF;
+   tempPacket[3] = newid>>16&0xFF;
+   retCode = radio.write(tempPacket,32);
+   radio.setAutoAck(0,false);
+   radio.startListening();
+   return retCode;
+}
+
 bool WnrfDriver::sendGenericCmd(uint8_t pipe, uint8_t cmd, uint16_t value) {
    tPipeInfo * pid = &(gPipes[pipe]);
    byte tempPacket[32];
@@ -774,7 +800,7 @@ bool WnrfDriver::sendGenericCmd(uint8_t pipe, uint8_t cmd, uint16_t value) {
    return retCode;
 }
 
-int WnrfDriver::nrf_devid_update(tDevId devId, tDevId newId, void * context) {
+int WnrfDriver::nrf_devid_update(tDevId devId, tDevId newid, void * context) {
   int retCode = -1;
   byte msg[32];
 
@@ -784,30 +810,15 @@ int WnrfDriver::nrf_devid_update(tDevId devId, tDevId newId, void * context) {
       int pipe = nrf_bind(devId, BIND_DEVID, context);
       if (pipe>=0) {
          tPipeInfo * pid = &(gPipes[pipe]);
-         pid->newId = newId;
+         pid->newid = newid;
          retCode =0 ;
       }
 
       Serial.print("MTC CMD: PROG DEVICE: ");
       Serial.print(devId,HEX);
       Serial.print(" to ");
-      Serial.print(newId,HEX);
+      Serial.print(newid,HEX);
 
-/* Move to a TX_yyy handler
-         radio.stopListening();
-         radio.openWritingPipe(addr_device);
-            // Update the payload packet
-            // Protocol: 48-bit "string" to avoid accidental false positives.
-            // byte 0 = 0x03 Write DeviceId command
-            // byte 1 = New DevId MSB
-            // byte 2 = New DevId ...
-            // byte 3 = New DevId LSB
-         msg[0] = 0x03;
-         memcpy(msg,newId,3);
-         retCode = radio.write(msg,32); // P2P uses AA on the receiver
-         radio.openWritingPipe(addr_wnrf_bcast);
-         radio.startListening();
-*/
   return retCode;
 }
 
@@ -963,6 +974,16 @@ void WnrfDriver::checkRx() {
                pid->context = NULL;
                check_beacon = true;
                break;
+             case NRF_CTL_W4_DEVID_ACK:
+               Serial.print("Receive DEVID_ACK: (");
+               Serial.print(pipe+2);
+               Serial.print("):");
+               Serial.println(payload[1]);
+               if (nrf_async_devid)
+                 nrf_async_devid(pid->txaddr,pid->context, payload[1]);
+               pid->state = NRF_CTL_NONE;
+               pid->context = NULL;
+               check_beacon = true;
              case NRF_CTL_NONE: // Do nothing - warn the console?
              default:
                Serial.print("Unknown Rx packet: (");
@@ -1058,6 +1079,10 @@ void WnrfDriver::checkRx() {
                    case NRF_CTL_W4_CHAN_ACK:
                       Serial.println("Re-send set-chan request");
                       sendGenericCmd(i, 0x01 /* cmd */, pid->e131_start);
+                      break;
+                    case NRF_CTL_W4_DEVID_ACK:
+                      Serial.println("Re-send DEVID request");
+                      tx_newid(i,pid->newid);
                       break;
                    default:
                       Serial.println("Nothing Pending Timeout");
