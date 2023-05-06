@@ -5,6 +5,9 @@ var wsBusy = false;
 var wsTimerId;
 var devices =[]; // Start with Empty Array
 var wnrfTimerId;
+var rfc_cache=0;
+var rff_cache=0;
+
 
 const auditInterval = setInterval(auditDevices, 5000);
 // json with effect definitions
@@ -64,6 +67,28 @@ $(function() {
  // Add a timeout handler here.. *OR* can we probe the hidden frame to
  // see it's status?
           });
+
+        $('#crfc').change(function() {
+          // Warn Administrator
+          if (window.confirm("Move the device to a different nRF Universe")) {
+             $('#rfcommit').removeClass('hidden');
+          } else {
+             $('#crfc').val(rfc_cache);
+             if ($('#crfr').val()==rfr_cache) 
+                $('#rfcommit').addClass('hidden');
+          }
+        });
+
+        $('#crfr').change(function() {
+          // Warn Administrator
+          if (window.confirm("Change to different Transmission Rate?")) {
+             $('#rfcommit').removeClass('hidden');
+          } else {
+             $('#crfr').val(rfr_cache);
+             if ($('#crfc').val()==rfc_cache) 
+                $('#rfcommit').addClass('hidden');
+          }
+        });
 
         $('#newid').change(function() {
            var regexp = new RegExp(/^[0-9A-F]{6}$/i);
@@ -233,8 +258,7 @@ $(function() {
        }
     });
 
-    $('#dev_admin').click(function() {
-        if ($(this).is(':checked')) {
+    $('#dev_admin').click(function() { if ($(this).is(':checked')) {
             if (window.confirm("Device Admin will pause data streaming..")) {
                $('.devadmin').removeClass('hidden');
                wsEnqueue('DA'); // Enabled ADMIN mode
@@ -258,6 +282,21 @@ $(function() {
        };
        wsEnqueue('D4' + JSON.stringify(json));
        $('#update').modal();
+    });
+
+    // WNRF CLIENT RF UPDATE
+    $('#rfcommit').click(function() {
+      if (window.confirm("Confirm changes to RF settings?")) {
+         var json = {
+             'devid': $('#ed_devid').text(),
+             'rfchan': $('#crfc').val(),
+             'rfrate': $('#crfr').val()
+          };
+          wsEnqueue('D6' + JSON.stringify(json));
+          $('#update').modal();
+       } else {
+          // Do Nothing
+       }
     });
 
 
@@ -389,10 +428,11 @@ function rxNewidReply(data) {
        var devindex =-1;
        for (var i=0;i<devices.length;i++) {
           if (devices[i].dev_id == admin.dev_id)  {
-             table.deleteRow(i);
+             devices.splice(i,1); //deleteRow(i);
              break;
           }
        }
+       $('#ed_devid').text($('#newid').val());
        showDevices();
     }
     $('#update').modal('hide');
@@ -686,11 +726,25 @@ function getElements(data) {
         for (var j in elements[i]) {
             var opt = document.createElement('option');
             opt.text = j;
-            opt.value = elements[i][j]; document.getElementById(i).add(opt);
+            opt.value = elements[i][j]; 
+            document.getElementById(i).add(opt);
         }
     }
 }
 
+function getpcb( pcb_id ) {
+  switch(pcb_id) {
+      case 0x00: return "DEV BOARD"; break;
+      case 0x01: return "3CHAN"; break;
+      case 0x02: return "NRF2DMX"; break;
+      case 0x03: return "LUXEONRGB"; break;
+      case 0x04: return "12CHAN"; break;
+      case 0x05: return "ARDUINO UNO"; break;
+      case 0x06: return "RFCOLOR"; break;
+      default:
+         return "N/A'"; break;
+  }
+}
 function showDevices() {
     // Code to re-populated the HTML <TABLE>
     var table = document.getElementById("nrf_list");
@@ -705,7 +759,8 @@ function showDevices() {
     for (var i=0;i<devices.length;i++) {
            var row = table.insertRow(i+1); // Offset for header
            row.insertCell(0).innerHTML= devices[i].dev_id;
-           row.insertCell(1).innerHTML= devices[i].type;
+	   row.insertCell(1).innerHTML=getpcb(devices[i].pcb); 
+
            if (devices[i].apv == 0xFF) {
              row.insertCell(2).innerHTML= "N/A"
              row.insertCell(3).innerHTML= "---";
@@ -740,11 +795,16 @@ function getDevices(data) {
        if (index ==-1) {
           // This is a new array entry - add to the list
           devices.push({dev_id: i,
-                        type:  devlist[i].type,
+                        pcb:   devlist[i].pcb,
+                        proc:  devlist[i].proc,
                         blv:   devlist[i].blv,
                         apm:   devlist[i].apm,
                         apv:   devlist[i].apv,
                         start: devlist[i].start+1,
+                        numchan: devlist[i].numchan,
+                        rfrate: devlist[i].rfrate,
+                        rfchan: devlist[i].rfchan,
+                        cap:    devlist[i].devcap,
                         audit: 6});
         } else {
            devices[index].audit=6; // Renew it's lease
@@ -842,16 +902,56 @@ function editDevice(devid) {
 
      var device = devices[devindex];
 
-
      $('#ed_devid').text(device.dev_id);
-     //$('#ed_type').text(device.type);
-     if (device.type == 0)
-        $('#ed_type').text('16F1823');
-     else
-        $('#ed_type').text('N/A');
+     $('#ed_type').text(getpcb(device.pcb)+'   ('+device.apm+')'); 
+
+     switch (device.proc) {
+        case 0x00: $('#ed_proc').text('16F1823'); break;
+        case 0x01: $('#ed_proc').text('16F1825'); break;
+        case 0x02: $('#ed_proc').text('16F722'); break;
+        case 0x80: $('#ed_proc').text('ATMEGA328P'); break;
+        default: $('#ed_proc').text('UNKNOWN'); break;
+     }
+
+     $('#ed_numc').text(device.numchan);
      $('#ed_blv').text(((device.blv>>4)&0x0F)+'.'+((device.blv&0x0F)));
-     $('#ed_apm').text(device.apm);
      $('#ed_apv').text( ((device.apv>>4)&0x0F)+'.'+((device.apv&0x0F)));
+
+     // Based on capabilities - show data, or show form
+     if (device.cap & 0x18) {
+        console.log("CAPABILITY: "+device.cap);
+        // SELECT entries for RFC and/or RFR
+        rfc_cache = device.rfchan;
+        rfr_cache = device.rfrate;
+        for (i=70;i<84;i+=2) {
+            var opt = document.createElement('option');
+               if (i==80) 
+                  opt.text ="Legacy ("+(2400+i)+")";
+               else
+                  opt.text = 2400+i;
+
+               opt.value = i;
+               if (device.rfchan==i) 
+                 opt.selected = true;
+
+               document.getElementById('crfc').add(opt);
+        }
+        for (i=1;i<3;i++) {
+           var opt = document.createElement('option');
+           opt.text = i+" Mbps";
+           opt.value = i;
+           if (device.rfrate==i) 
+              opt.selected = true;
+           document.getElementById('crfr').add(opt);
+        }
+        $('#rfcommit').addClass('hidden'); // hide until change
+     } else { 
+        $('#ed_rfc').text( device.rfchan );
+        $('#ed_rfr').text( device.rfrate );
+        $('#rfcommit').addClass('hidden');
+        $('#crfc').addClass('hidden');
+        $('#crfr').addClass('hidden');
+     }
 
      $('#s_chanid').val(device.start); // The RANGE slider
      $('#channel').val(device.start);  // The RANGE output
@@ -868,6 +968,14 @@ function editDevice(devid) {
      // Enabled the OTA update if ADMIN and HEX file is present
      if (admin_ctl) {
         $('#ota').prop('disabled',($('#nrf_fw').text() === 'none'));
+
+        // Only show if APM indicates OTA capability
+   // TODO: Change to show if FIRMWARE MAGIC = APM (compatability check)
+        if (device.apm > 0) {
+           $('#ota').removeClass('hidden');
+        } else {
+           $('#ota').addClass('hidden');
+        }
      }
 
      // Display the Edit Panes
@@ -889,6 +997,17 @@ function doneEdit() {
     // Update the table ?
      ($('#ed_devid').text(""));
      $('.devedit').addClass('hidden');
+
+    //Clean up the dynamic SELECT boxes
+    var x = document.getElementById('crfr');
+    while (x.options.length >0) 
+        x.remove(0);
+
+    var x = document.getElementById('crfc');
+    while (x.options.length >0) 
+        x.remove(0);
+
+    
 }
 
 function getConfig(data) {

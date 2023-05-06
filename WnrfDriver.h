@@ -77,13 +77,20 @@ typedef struct sPipeState {
 // Pipes 0&1 are reserved for Transmiting and Broadcast receipt
 
 typedef struct sDeviceInfo {
+  // Hardware
   tDevId   dev_id; //device_id
-  uint8_t  type;   //device_type;
+  uint8_t  pcb_type; // device type identifier
+  uint8_t  pcb_version; // device version identifier
+  uint8_t  processor;// device processor identifier
+  uint16_t numchan; // How many channels does this device user?
   uint8_t  blv;    //bootloader_version;
-  // Application specific
   uint8_t  apm;    //Application magic_number;
+  // Application specific
   uint8_t  apv;    //Application version;
   uint16_t start;  //E1.31 channel_start;
+  uint8_t  rfchan; //RF Channel
+  uint8_t  rfrate; // 250K/1M/2M bps
+  uint8_t  cap;    // Bit mask of admin capabilities
 } tDeviceInfo;
 
 typedef void (* async_bind_handler)     (tDevId devId, void * context, int result);

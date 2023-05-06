@@ -73,6 +73,7 @@ AsyncWebSocketClient * ws_edit_client;
     D4 - OTA flash return code
     D5 - Admin - change device id 
     Da/A - enable.disable Device Admin
+    D6 - Admin - change RF settings
 
     S1 - Set Network Config
     S2 - Set Device Config
@@ -217,11 +218,17 @@ void cb_devlist(tDeviceInfo * dev_list, uint8_t count) {
          sprintf(tempid,"%2.2X%2.2X%2.2X",bytes[2],bytes[1],bytes[0]); */
          JsonObject device = devList.createNestedObject(tempid);
             device["dev_id"]= tempid;    // Device Id
-            device["type"]  = dev->type; // Device Type
+            device["pcb"]   = dev->pcb_type; // Device PCB Type
+            device["pcbv"]  = dev->pcb_version; // Device PCB Version
+            device["proc"]  = dev->processor; // Device PCB Type
             device["blv"]   = dev->blv;  // Boot Loader Version
             device["apm"]   = dev->apm;  // App Magic Number
             device["apv"]   = dev->apv;  // Boot Loader Version
             device["start"] = dev->start;// E1.31 start Address
+            device["rfchan"] = dev->rfchan;// nRF RF channel
+            device["rfrate"] = dev->rfrate;// nRF RF data rate
+            device["numchan"] = dev->numchan;// Number of Channels used by this device
+            device["devcap"] = dev->cap;
       } // While
 
       // Prepare JSON for transmission

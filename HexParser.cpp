@@ -105,7 +105,7 @@ uint8_t lhe_read_record(File *file , uint16_t * addr, char * data ) {
       uint16_t r_addr;
       int count = lhe_read_header(file, &r_addr, &csum);
 
-      if (count>0) {
+      if ((count>0) && (r_addr>0x1FF)){
          if (count_pending) {
             // Trye and read second line of HEX
             lhe_read_payload(file,count,&(data[count_pending]),&csum);

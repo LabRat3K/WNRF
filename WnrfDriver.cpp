@@ -45,6 +45,7 @@
 #include <printf.h>
 #include <FS.h> // Defn of 'File'
 #include "HexParser.h"
+#include "RatLights.h"
 
 // Some common board pin assignments
 #ifdef WEMOS_D1
@@ -68,6 +69,9 @@
 #define NRF_CTL_W4_RF_ACK     (0x08)
 
 
+// LabRat's Lights message
+#define LLM_ACK   (0x01)
+#define LLM_NACK  (0x00)
 
 // Common BIND routines, so need to store
 // the reason (and parameters) for the BIND
@@ -166,7 +170,7 @@ uint32_t addr_wnrf_bcast = 0xC0DE42;
 uint32_t addr_wnrf_ctrl = 0xC0DEC1;
 
 int WnrfDriver::begin(NrfBaud baud, NrfChan chanid, int chan_size) {
-    byte NrfRxAddress[] = {0xFF,0x3A,0x66,0x65,0x76};
+    byte frfRxAddress[] = {0xFF,0x3A,0x66,0x65,0x76};
     int alloc_size = 32;
 
     // Async Functions - callback context
@@ -366,20 +370,26 @@ void WnrfDriver::parseNrf_x88(uint8_t *data) {
    if (gdevice_count<10) { // Prevent Buffer Overrun
       char tempid[8];
       tDeviceInfo *temp = &(gdevice_list[gdevice_count++]);
+      tConfigMessage *config = (tConfigMessage *) &(data[1]);
 
-      temp->dev_id = data[3]<<16|data[2]<<8|data[1]; // Device Id
-      temp->type   = data[4];           // Device Type
-      temp->blv    = data[5];           // Boot Loader Version */
-      temp->apm    = data[6];           // App Magic Number */
-      temp->apv    = data[7];           // Boot Loader Version */
-      temp->start  = data[8]|(data[9]<<8);
+      temp->dev_id = config->deviceId[2]<<16 | config->deviceId[1]<<8 | config->deviceId[0]; // Device Id
 
-      Serial.print("** Client Device detected [");
-      for (int i=1;i<4;i++) {
-         char hex[3];
-         sprintf(hex,"%2.2x",data[i]);
-         Serial.print(hex);
-      }
+      temp->pcb_type    = config->pcb_type;   // Device Type
+      temp->pcb_version = config->pcb_version;
+      temp->processor   = config->processor;   // Device Type
+      temp->numchan     = config->num_channels[1]<<8|config->num_channels[0];
+      temp->blv         = config->bl_version;  // Boot Loader Version
+      temp->apm         = config->bl_appmagic; // App Magic Number
+      temp->apv         = config->app_version; // Boot Loader Version
+      temp->rfchan      = config->app_rfchan; // nrf RF channel
+      temp->rfrate      = config->app_rfrate; // nrf RF data rate (250K/1M/2M)
+      temp->start       = config->start_chan[1]<<8|config->start_chan[0];   // Start Channel
+      temp->cap	        = config->admin_cap;  // Administration Capabilities
+
+// TODO: LabRat - add RFCHAN, RFRATE here..
+
+      Serial.print("Nrf(1) Rx88:[");
+      Serial.print(temp->dev_id,HEX);
       Serial.println("]");
    }
    sendDeviceList();
@@ -390,8 +400,11 @@ void WnrfDriver::sendBeacon() {
 
    // ONLY send beacon if in ADMIN mode
    if (gbeacon_active == true) {
-      // Throttle to every 2 seconds
-      if (millis()-gbeacon_timeout > 5000) {
+      // Throttle to every 2.5 seconds
+      if (millis()-gbeacon_timeout > 2500) {
+         Serial.print("**TX BEACON to 0x");
+         Serial.print(addr_wnrf_ctrl, HEX);
+         Serial.println("**");
          radio.stopListening();
          radio.openWritingPipe(addr_wnrf_ctrl);
          tempPacket[0]=0x85;
@@ -521,7 +534,7 @@ bool WnrfDriver::tx_audit(uint8_t pipe) {
 
 
   // Hack.. use the msg buffer initially as a string
-   sprintf(msg,"Tx audit ADDR:%4.4x  Size:%4.4X CSUM:%4.4X",pid->fw.start, pid->fw.size, pid->fw.csum);
+   sprintf(msg,"Tx audit ADDR:%4.4x  Size:%4.4X CSUM:%4.4X",pid->fw.start, (pid->fw.size)/2, pid->fw.csum);
    Serial.println(msg);
 
    msg[0] = 0x83; // AUDIT
@@ -576,6 +589,10 @@ bool WnrfDriver::tx_commit(uint8_t pipe) {
       radio.stopListening(); // Ready to Write - EN_RXADDRP0 = 1
       radio.openWritingPipe(pid->txaddr);
       radio.setAutoAck(0,true);
+  
+      Serial.print("COMMIT  csum=0x");
+      Serial.print(csum&0xFF,HEX);
+      Serial.println(".");
 
       retCode =  radio.write(msg,32); // Want to get AA working here
 
@@ -607,6 +624,9 @@ bool WnrfDriver::tx_write(uint8_t pipe) {
       size = lhe_read_record_at(&(ota_files[pipe]),pid->fw.offset,&addr,&(msg[1]));
       // *NOTE* - offset 1 so that we have room for the command
 
+      Serial.print("WRITE ");
+      Serial.print(size);
+      Serial.println(" bytes");
       msg[0] = 0x81;
       pid->state = NRF_CTL_W4_WRITE_ACK;
 
@@ -660,12 +680,18 @@ bool WnrfDriver::tx_setup(uint8_t pipe, bool resend) {
             // Jump to Audit
             ota_files[pipe].close();
             pid->state = NRF_CTL_W4_AUDIT_ACK;
+            Serial.println('.');
             tx_audit(pipe);
             return retCode;
          }
       }
       pid->state = NRF_CTL_W4_SETUP_ACK;
 
+      Serial.print("SETUP:0x");
+      Serial.print(addr&0xffff,HEX);
+      Serial.print(" ");
+      Serial.print(pid->fw.size,HEX);
+      Serial.println();
       msg[0] = 0x80; // flash write SETUP
       msg[1] = addr&0xff;
       msg[2] = addr>>8&0xff;
@@ -694,7 +720,11 @@ bool WnrfDriver::tx_bind(uint8_t pipe) {
       // Allocate a pipe and send that address to the client
       // (for now use the default)
       // Format <0x87><DevId0><DevId1><DevId2><P2P0><P2P1><P2P2>
-  Serial.println("Sending Bind request");
+  Serial.print("Tx Bind request to pipe:");
+  Serial.print(pipe);
+  Serial.print(" 0x");
+  Serial.print(gPipes[pipe].txaddr,HEX);
+  Serial.print(":");
 
    // Will this work to copy lower 3 bytes from the uint32_t?
       memcpy(&(msg[1]),&gPipes[pipe].txaddr,3);
@@ -703,8 +733,9 @@ bool WnrfDriver::tx_bind(uint8_t pipe) {
    Serial.print("MSG:");
    for (int i=0;i<6;i++) {
       Serial.print(msg[i],HEX);
+      Serial.print(",");
    }
-   Serial.println(".");
+   Serial.println(msg[6],HEX);
 
       radio.openReadingPipe(pipe+2,gPipes[pipe].rxaddr);
       radio.setAutoAck(pipe+2,true);
@@ -730,6 +761,11 @@ bool WnrfDriver::tx_bind(uint8_t pipe) {
 
 int WnrfDriver::nrf_bind(tDevId devId, uint8_t reason, void * context) {
    // Scan pipe list to see if a pipe is available
+Serial.print("DEBUG BIND:");
+Serial.print(devId,HEX);
+Serial.print(" reason:");
+Serial.print(reason);
+
    int pipe = storeContext(context);
 
    if (pipe == -1) {
@@ -806,6 +842,12 @@ int WnrfDriver::nrf_devid_update(tDevId devId, tDevId newid, void * context) {
 
   // Add some chanId validation?
 
+
+      Serial.print("MTC CMD: PROG DEVICE: ");
+      Serial.print(devId,HEX);
+      Serial.print(" to ");
+      Serial.println(newid,HEX);
+
       // Send the BIND and enter wait for BIND timeout
       int pipe = nrf_bind(devId, BIND_DEVID, context);
       if (pipe>=0) {
@@ -813,11 +855,6 @@ int WnrfDriver::nrf_devid_update(tDevId devId, tDevId newid, void * context) {
          pid->newid = newid;
          retCode =0 ;
       }
-
-      Serial.print("MTC CMD: PROG DEVICE: ");
-      Serial.print(devId,HEX);
-      Serial.print(" to ");
-      Serial.print(newid,HEX);
 
   return retCode;
 }
@@ -906,13 +943,19 @@ void WnrfDriver::checkRx() {
            }
 
         } else {
-
           if ((pipe<2) || (pipe>5)) {
              Serial.print("ERROR: INVALID PIPE INDEX (");
              Serial.print(pipe);
              Serial.println(")");
              return;
           }
+
+          Serial.print("Rx Nrf(");
+          Serial.print(pipe);
+          Serial.print(") ");
+          Serial.print(payload[0],HEX);
+          Serial.print(", ");
+          Serial.println(payload[1]);
 
           pipe -=2;  //Index into gPipes array
 
@@ -923,12 +966,16 @@ void WnrfDriver::checkRx() {
           switch (pid->state) {
              case NRF_CTL_W4_BIND_ACK:
                if (payload[0] == 0x87) {
-                 rx_ackbind(pipe);
+                 if (payload[1] == LLM_ACK) {
+                    rx_ackbind(pipe); 
+                 } else {
+                    Serial.println("BIND failed");
+                 }
                }
                break;
              case NRF_CTL_W4_SETUP_ACK:
                if (payload[0] == 0x80) {
-                 if (payload[1] == 0x01) {
+                 if (payload[1] == LLM_ACK) {
                     rx_acksetup(pipe);
                  } else {
                     Serial.println("Setup failed");
@@ -938,7 +985,7 @@ void WnrfDriver::checkRx() {
                break;
              case NRF_CTL_W4_WRITE_ACK:
                if (payload[0] == 0x81) {
-                 if (payload[1] == 0x01) {
+                 if (payload[1] == LLM_ACK) {
                    rx_ackwrite(pipe);
                  } else {
                    Serial.println("WRITE failed");
@@ -948,7 +995,7 @@ void WnrfDriver::checkRx() {
                break;
              case NRF_CTL_W4_COMMIT_ACK:
                if (payload[0] == 0x82) {
-                 if (payload[1] == 0x01) {
+                 if (payload[1] == LLM_ACK) {
                    rx_ackcommit(pipe);
                  } else {
                    Serial.println("Commit failed");
@@ -963,27 +1010,52 @@ void WnrfDriver::checkRx() {
                check_beacon = true;
                break;
              case NRF_CTL_W4_CHAN_ACK:
-               // To Do .. add some error handling here..
-               Serial.print("Receive CHAN_ACK : (");
-               Serial.print(pipe+2);
-               Serial.print("):");
-               Serial.println(payload[1]);
-               if (nrf_async_startaddr)
-                 nrf_async_startaddr(pid->txaddr,pid->context, payload[1]);
-               pid->state = NRF_CTL_NONE;
-               pid->context = NULL;
-               check_beacon = true;
+               if (payload[0] == 0x01) {
+                  // To Do .. add some error handling here..
+                  Serial.print("Receive CHAN_ACK : (");
+                  Serial.print(pipe+2);
+                  Serial.print("):");
+                  Serial.println(payload[1]);
+
+                  if (nrf_async_startaddr)
+                    nrf_async_startaddr(pid->txaddr,pid->context, payload[1]);
+                  pid->state = NRF_CTL_NONE;
+                  pid->context = NULL;
+                  check_beacon = true;
+               } else {
+                  Serial.print("Unexpected Rx message: (");
+                  Serial.print(pipe+2);
+                  Serial.print(") ");
+                  for (int i=0;i<8;i++) {
+                    char hex[3];
+                    sprintf(hex,"%2.2x",payload[i]);
+                    Serial.print(hex);
+                  }
+               }
                break;
              case NRF_CTL_W4_DEVID_ACK:
-               Serial.print("Receive DEVID_ACK: (");
-               Serial.print(pipe+2);
-               Serial.print("):");
-               Serial.println(payload[1]);
-               if (nrf_async_devid)
-                 nrf_async_devid(pid->txaddr,pid->context, payload[1]);
-               pid->state = NRF_CTL_NONE;
-               pid->context = NULL;
-               check_beacon = true;
+               if (payload[0] == 0x03) {
+                  Serial.print("Receive DEVID_ACK: (");
+                  Serial.print(pipe+2);
+                  Serial.print("):");
+                  Serial.println(payload[1]);
+
+                  if (nrf_async_devid)
+                    nrf_async_devid(pid->txaddr,pid->context, payload[1]);
+                  pid->state = NRF_CTL_NONE;
+                  pid->context = NULL;
+                  check_beacon = true;
+               } else {
+                  Serial.print("Unexpected Rx message: (");
+                  Serial.print(pipe+2);
+                  Serial.print(") ");
+                  for (int i=0;i<8;i++) {
+                    char hex[3];
+                    sprintf(hex,"%2.2x",payload[i]);
+                    Serial.print(hex);
+                  }
+               }
+               break;
              case NRF_CTL_NONE: // Do nothing - warn the console?
              default:
                Serial.print("Unknown Rx packet: (");
@@ -1057,11 +1129,11 @@ void WnrfDriver::checkRx() {
                 pid->waitCount++;
                 switch(pid->state) {
                    case NRF_CTL_W4_BIND_ACK:
-                      Serial.println("Re-bind request");
+                      Serial.print("Re-bind request::");
                       tx_bind(i);
                       break;
                    case NRF_CTL_W4_SETUP_ACK:
-                      Serial.println("Re-Setup request");
+                      Serial.print("Re-Setup request::");
                       tx_setup(i,true);
                       break;
                    case NRF_CTL_W4_WRITE_ACK:

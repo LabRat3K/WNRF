@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title id="title"></title>
-<!--
+  <!--
   <link rel="stylesheet" type="text/css" href="css/bootstrap.css">
   <link rel="stylesheet" type="text/css" href="style.css">
 -->
@@ -248,6 +248,8 @@
                <table class="esps-table">
                  <tr><td width="25%">Device ID</td><td><span id="ed_devid"></span></td></tr>
                  <tr><td width="25%">Type</td><td><span id="ed_type"></span></td></tr>
+                 <tr><td width="25%">Processor</td><td><span id="ed_proc"></span></td></tr>
+                 <tr><td width="25%">#Channels</td><td><span id="ed_numc"></span></td></tr>
                  <tr><td width="25%">Loader</td><td><span id="ed_blv"></span></td></tr>
                  <tr><th colpsan=2><div class="form-group"><button id="ota" type="button" class="btn btn-danger" disabled>OTA LOAD</button></div></th></tr>
                </table>
@@ -257,20 +259,24 @@
              <legend class="esps-legend">Application Config</legend>
              <form class="form-horizontal" onsubmit="return false">
                <table class="esps-table">
-                 <tr><td width="25%">F/W Magic</td><td colspan=3><span id="ed_apm"></span></td></tr>
                  <tr><td width="25%">F/W Version</td><td colspan=3><span id="ed_apv"></span></td></tr>
-                 <tr><td width="25%">Channel</td><td colspan=3><input type="range" min="1" max="512" id="s_chanid" oninput="this.nextElementSibling.value = this.value" onchange="editChan()" title="Start address in E1.31 stream for this device">
+                 <tr><td width="25%">E1.31 Start<br>Channel</td><td colspan=3><input type="range" min="1" max="512" id="s_chanid" oninput="this.nextElementSibling.value = this.value" onchange="editChan()" title="Start address in E1.31 stream for this device">
                     <output id="channel"></output></td></tr>
                  <tr><td width="25%">Device Id</td><td><span id="ed_newid">
                      <div class="col-sm-10"><input type="text" id="newid" name="newid" title="Factory setup: program device id into the unit." size=6 maxlength=6 minlength=6 ></div></span></td>
                  </tr>
+                 <tr><td colspan=4>Radio Config</td></tr>
+                 <tr><td></td><td width="25%">Channel</td>
+                              <td><span id="ed_rfc"></span></td>
+                              <td><select id="crfc" name="crfc"></select></td></tr>
+                 <tr><td></td><td width="25%">Rate</td>
+                              <td><span id="ed_rfr"></span></td>
+                              <td><select id="crfr" name="crfr"></select></td></tr>
+                 <tr><td colspan=3></td><th><div class="form-group"><button id="rfcommit" type="button" class="btn btn-danger">COMMIT</button></div></th></tr>
                </table>
              </form>
           </div>
         </fieldset>
-        <form class="form-horizontal" onsubmit="return false">
-        <div class="form-group"><center><button type="button" onclick="doneEdit()" class="btn btn-primary" onClick=" $('.devedit').addClass('hidden');">Done</button></center></div>
-         </form>
       </div>
       
       <!--End of Device Edit Form-->
