@@ -386,11 +386,10 @@ void WnrfDriver::parseNrf_x88(uint8_t *data) {
       temp->start       = config->start_chan[1]<<8|config->start_chan[0];   // Start Channel
       temp->cap	        = config->admin_cap;  // Administration Capabilities
 
-// TODO: LabRat - add RFCHAN, RFRATE here..
-
       Serial.print("Nrf(1) Rx88:[");
       Serial.print(temp->dev_id,HEX);
-      Serial.println("]");
+      Serial.print("] CAP:0x");
+      Serial.println(temp->cap,HEX);
    }
    sendDeviceList();
 }

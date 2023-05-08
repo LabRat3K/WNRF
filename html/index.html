@@ -262,7 +262,7 @@
                  <tr><td width="25%">F/W Version</td><td colspan=3><span id="ed_apv"></span></td></tr>
                  <tr><td width="25%">E1.31 Start<br>Channel</td><td colspan=3><input type="range" min="1" max="512" id="s_chanid" oninput="this.nextElementSibling.value = this.value" onchange="editChan()" title="Start address in E1.31 stream for this device">
                     <output id="channel"></output></td></tr>
-                 <tr><td width="25%">Device Id</td><td><span id="ed_newid">
+                 <tr id="row_newid"><td width="25%">Device Id</td><td><span id="ed_newid">
                      <div class="col-sm-10"><input type="text" id="newid" name="newid" title="Factory setup: program device id into the unit." size=6 maxlength=6 minlength=6 ></div></span></td>
                  </tr>
                  <tr><td colspan=4>Radio Config</td></tr>
@@ -520,7 +520,6 @@
   <script type="text/javascript" src="script.js"></script>
   -->
   <script type="text/javascript" src="esps.js"></script>
-
   <script>
     wsConnect();
   </script>

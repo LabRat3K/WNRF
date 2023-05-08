@@ -17,6 +17,7 @@
 #define DEVICE_PROCESSOR_16F722  0x02
 #define DEVICE_PROCESSOR_ATMEGA328P 0x80
 
+// Capability map - which functions each FW image supports
 #define ADMIN_CAP_OTA    0x01
 #define ADMIN_CAP_DEVID  0x02
 #define ADMIN_CAP_START  0x04
@@ -27,13 +28,6 @@
 #define RFRATE_250K   0x00
 #define RFRATE_1MB    0x01
 #define RFRATE_2MB    0x02
-
-#define CAP_OTA      0x01
-#define CAP_DEVID    0x02
-#define CAP_START    0x04
-#define CAP_RFRATE   0x08
-#define CAP_RFCHAN   0x10
-#define CAP_LEDMAP   0x20
 
 
 typedef struct sConfigBlock {  //msg offset[] (add 1 for 0x88 leading byte)
@@ -61,6 +55,7 @@ typedef struct sConfigBlock {  //msg offset[] (add 1 for 0x88 leading byte)
       uint8_t app_rfchan;      //[18] Client image
       uint8_t app_rfrate;      //[19] Client image
       uint8_t admin_cap;       //[20] Admin capabilies bitmap 
+      uint8_t spare;
    // Reserved for future
    // -------------------
       uint8_t reserved[8];     //[21-29] Prevent need for new BL with app changes in the future 

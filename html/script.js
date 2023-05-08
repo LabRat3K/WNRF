@@ -811,6 +811,8 @@ function getDevices(data) {
            devices[index].apm = devlist[i].apm;
            devices[index].apv = devlist[i].apv;
            devices[index].start = devlist[i].start+1;
+	   // Update Capabilities as they can change from BL to APP
+	   devices[index].cap = devlist[i].devcap;
         }
     }
 }
@@ -902,6 +904,18 @@ function editDevice(devid) {
 
      var device = devices[devindex];
 
+     if (device.cap & 0x02) {
+       $('#row_newid').removeClass('hidden');
+     } else {
+       $('#row_newid').addClass('hidden');
+     }
+
+     if (device.cap & 0x04) {
+       $('#s_chanid').removeClass('hidden');
+     } else {
+       $('#s_chanid').addClass('hidden');
+     }
+
      $('#ed_devid').text(device.dev_id);
      $('#ed_type').text(getpcb(device.pcb)+'   ('+device.apm+')'); 
 
@@ -918,8 +932,8 @@ function editDevice(devid) {
      $('#ed_apv').text( ((device.apv>>4)&0x0F)+'.'+((device.apv&0x0F)));
 
      // Based on capabilities - show data, or show form
+     //console.log("CAPABILITY: "+device.cap);
      if (device.cap & 0x18) {
-        console.log("CAPABILITY: "+device.cap);
         // SELECT entries for RFC and/or RFR
         rfc_cache = device.rfchan;
         rfr_cache = device.rfrate;
@@ -959,6 +973,7 @@ function editDevice(devid) {
      $('#newid').val(device.dev_id); // Device Id
 
      // Enable AP editing if AP version is not 0xFF
+     // TODO: Change to Capability map based.  APP would only appear when APP code is active
      if (device.apv != 0xFF) {
         $('.apedit').removeClass('hidden');
      } else {
